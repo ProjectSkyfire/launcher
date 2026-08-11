@@ -2,3 +2,13 @@ Build/
 obj/
 .vs/
 *.user
+
+# Runtime folders the WoW client generates next to its exe
+Patched/WTF/
+Patched/Cache/
+Patched/Errors/
+Patched/Logs/
+Unpatched/WTF/
+Unpatched/Cache/
+Unpatched/Errors/
+Unpatched/Logs/

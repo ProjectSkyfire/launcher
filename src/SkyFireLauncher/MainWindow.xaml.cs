@@ -2,12 +2,16 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using SkyFireLauncher.Configuration;
+using SkyFireLauncher.Realm;
 using WinForms = System.Windows.Forms;
 
 namespace SkyFireLauncher;
 
 public partial class MainWindow : Window
 {
+    // TODO: replace with a configurable server address once we build that out.
+    private const string TargetRealmAddress = "127.0.0.1";
+
     private readonly ConfigManager _configManager = new();
     private AppConfig _config = new();
 
@@ -78,14 +82,8 @@ public partial class MainWindow : Window
 
         try
         {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = exePath,
-                WorkingDirectory = _config.ClientLocation,
-                UseShellExecute = true
-            });
-
-            LaunchStatusTextBlock.Text = $"Launched {exeName}.";
+            ClientProcessLauncher.LaunchAndRedirect(exePath, _config.ClientLocation, TargetRealmAddress);
+            LaunchStatusTextBlock.Text = $"Launched {exeName}, redirected to {TargetRealmAddress}.";
         }
         catch (Exception ex)
         {
