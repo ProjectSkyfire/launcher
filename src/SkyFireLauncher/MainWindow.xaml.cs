@@ -81,6 +81,7 @@ public partial class MainWindow : Window
 
         try
         {
+            RealmlistConfigWriter.SetRealmlist(_config.ClientLocation, _config.LoginAddress);
             ClientProcessLauncher.LaunchAndRedirect(exePath, _config.ClientLocation, _config.LoginAddress);
             LaunchStatusTextBlock.Text = $"Launched {exeName}, redirected to {_config.LoginAddress}.";
         }
