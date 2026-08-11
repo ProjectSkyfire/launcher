@@ -1,0 +1,37 @@
+<Window x:Class="SkyFireLauncher.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SkyFire Launcher" Height="400" Width="600"
+        ResizeMode="CanResize">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Configuration" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
+
+        <StackPanel Grid.Row="1" VerticalAlignment="Top">
+            <TextBlock Text="Client Location" Margin="0,0,0,4"/>
+            <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="ClientLocationTextBox" Grid.Column="0" Margin="0,0,8,0" VerticalContentAlignment="Center"/>
+                <Button x:Name="BrowseButton" Grid.Column="1" Content="Browse..." Width="90" Click="BrowseButton_Click"/>
+            </Grid>
+
+            <TextBlock Text="Default Version" Margin="0,0,0,4"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                <RadioButton x:Name="Version32RadioButton" Content="32-bit" GroupName="Version" Margin="0,0,16,0"/>
+                <RadioButton x:Name="Version64RadioButton" Content="64-bit" GroupName="Version"/>
+            </StackPanel>
+        </StackPanel>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="SaveButton" Content="Save" Width="90" Click="SaveButton_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>
