@@ -10,6 +10,7 @@
     <AssemblyName>SkyFireLauncher</AssemblyName>
     <RootNamespace>SkyFireLauncher</RootNamespace>
     <ApplicationTitle>SkyFire Launcher</ApplicationTitle>
+    <ApplicationIcon>AppIcon.ico</ApplicationIcon>
 
     <BaseOutputPath>..\..\Build\</BaseOutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
