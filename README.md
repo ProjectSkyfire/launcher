@@ -31,6 +31,15 @@ rough edges.
 
 ## Getting Started
 
+### Installer
+
+Download and run `SkyFireLauncherSetup.msi` from the latest
+[release](https://github.com/ProjectSkyfire/launcher/releases). It installs
+SkyFire Launcher (self-contained, no separate .NET install required) with a
+Start Menu shortcut and a standard uninstaller entry.
+
+### From source
+
 1. Build the solution:
    ```
    dotnet build SkyFireLauncher.slnx
@@ -40,6 +49,19 @@ rough edges.
    client architecture (32 or 64-bit), and the login address of the SkyFire
    server you want to connect to.
 4. On the **Launch** tab, pick a version and click **Launch**.
+
+### Building the installer
+
+Requires the [WiX Toolset](https://wixtoolset.org/) CLI:
+```
+dotnet tool install --global wix --version 5.0.2
+wix extension add -g WixToolset.UI.wixext/5.0.2
+```
+Then, from the `installer` folder:
+```
+./build.ps1
+```
+Produces `installer\bin\x64\Release\SkyFireLauncherSetup.msi`.
 
 ## License
 

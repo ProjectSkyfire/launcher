@@ -1,0 +1,59 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <Package Name="SkyFire Launcher"
+           Manufacturer="Project SkyFire"
+           Version="1.0.0"
+           UpgradeCode="839489CE-7CD2-4BB8-B100-B5C5F9C61550"
+           Language="1033"
+           Scope="perMachine">
+
+    <SummaryInformation Description="SkyFire Launcher Installer" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of SkyFire Launcher is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="AppIcon.ico" SourceFile="..\src\SkyFireLauncher\AppIcon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+    <Property Id="ARPNOREPAIR" Value="yes" Secure="yes" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="SkyFire Launcher" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="SkyFire Launcher" />
+    </StandardDirectory>
+
+    <DirectoryRef Id="ApplicationProgramsFolder">
+      <Component Id="ApplicationShortcut" Guid="6E4C0E4E-6C29-4A62-9E9F-2C6F9E9B2F41">
+        <Shortcut Id="ApplicationStartMenuShortcut"
+                  Name="SkyFire Launcher"
+                  Description="Launch SkyFire Launcher"
+                  Target="[INSTALLFOLDER]SkyFireLauncher.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon.ico" />
+        <RemoveFolder Id="RemoveApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue Root="HKCU"
+                        Key="Software\ProjectSkyfire\SkyFireLauncher"
+                        Name="installed"
+                        Type="integer"
+                        Value="1"
+                        KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Files Include="$(var.PublishDir)\**" />
+    </ComponentGroup>
+
+    <Feature Id="Main" Title="SkyFire Launcher" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+      <ComponentRef Id="ApplicationShortcut" />
+    </Feature>
+
+    <ui:WixUI Id="WixUI_InstallDir" />
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+
+  </Package>
+</Wix>
