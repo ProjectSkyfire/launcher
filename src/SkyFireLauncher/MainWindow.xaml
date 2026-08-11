@@ -59,6 +59,9 @@
                         <RadioButton x:Name="Version32RadioButton" Content="32-bit" GroupName="ConfigVersion" Margin="0,0,16,0"/>
                         <RadioButton x:Name="Version64RadioButton" Content="64-bit" GroupName="ConfigVersion"/>
                     </StackPanel>
+
+                    <TextBlock Text="Login Address" Margin="0,0,0,4"/>
+                    <TextBox x:Name="LoginAddressTextBox" Margin="0,0,0,12" VerticalContentAlignment="Center"/>
                 </StackPanel>
 
                 <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">

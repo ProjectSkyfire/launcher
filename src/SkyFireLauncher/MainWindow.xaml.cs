@@ -9,9 +9,6 @@ namespace SkyFireLauncher;
 
 public partial class MainWindow : Window
 {
-    // TODO: replace with a configurable server address once we build that out.
-    private const string TargetRealmAddress = "127.0.0.1";
-
     private readonly ConfigManager _configManager = new();
     private AppConfig _config = new();
 
@@ -25,6 +22,7 @@ public partial class MainWindow : Window
     {
         _config = _configManager.Load();
         ClientLocationTextBox.Text = _config.ClientLocation;
+        LoginAddressTextBox.Text = _config.LoginAddress;
 
         SetVersionRadios(Version32RadioButton, Version64RadioButton, _config.DefaultVersion);
         SetVersionRadios(LaunchVersion32RadioButton, LaunchVersion64RadioButton, _config.DefaultVersion);
@@ -54,6 +52,7 @@ public partial class MainWindow : Window
     {
         _config.ClientLocation = ClientLocationTextBox.Text;
         _config.DefaultVersion = Version64RadioButton.IsChecked == true ? ClientVersion.X64 : ClientVersion.X86;
+        _config.LoginAddress = LoginAddressTextBox.Text;
         _configManager.Save(_config);
 
         // Keep the launch tab's selector in sync with the newly saved default.
@@ -82,8 +81,8 @@ public partial class MainWindow : Window
 
         try
         {
-            ClientProcessLauncher.LaunchAndRedirect(exePath, _config.ClientLocation, TargetRealmAddress);
-            LaunchStatusTextBlock.Text = $"Launched {exeName}, redirected to {TargetRealmAddress}.";
+            ClientProcessLauncher.LaunchAndRedirect(exePath, _config.ClientLocation, _config.LoginAddress);
+            LaunchStatusTextBlock.Text = $"Launched {exeName}, redirected to {_config.LoginAddress}.";
         }
         catch (Exception ex)
         {
