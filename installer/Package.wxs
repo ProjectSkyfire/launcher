@@ -43,17 +43,40 @@
       </Component>
     </DirectoryRef>
 
+    <StandardDirectory Id="DesktopFolder">
+      <Component Id="DesktopShortcutComponent" Guid="4B2A6B7E-7C34-4E4A-9C4C-0F6E9C6B7A31">
+        <Shortcut Id="ApplicationDesktopShortcut"
+                  Name="SkyFire Launcher"
+                  Description="Launch SkyFire Launcher"
+                  Target="[INSTALLFOLDER]SkyFireLauncher.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon.ico" />
+        <RegistryValue Root="HKCU"
+                        Key="Software\ProjectSkyfire\SkyFireLauncher"
+                        Name="desktopShortcut"
+                        Type="integer"
+                        Value="1"
+                        KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
       <Files Include="$(var.PublishDir)\**" />
     </ComponentGroup>
 
-    <Feature Id="Main" Title="SkyFire Launcher" Level="1">
+    <Feature Id="Main" Title="SkyFire Launcher" Level="1" AllowAbsent="no">
       <ComponentGroupRef Id="ProductComponents" />
       <ComponentRef Id="ApplicationShortcut" />
     </Feature>
 
-    <ui:WixUI Id="WixUI_InstallDir" />
+    <Feature Id="DesktopShortcut" Title="Desktop Shortcut" Description="Create a shortcut to SkyFire Launcher on the desktop." Level="1">
+      <ComponentRef Id="DesktopShortcutComponent" />
+    </Feature>
+
+    <ui:WixUI Id="WixUI_FeatureTree" />
     <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+    <WixVariable Id="WixUIBannerBmp" Value="Banner.bmp" />
+    <WixVariable Id="WixUIDialogBmp" Value="DialogBackground.bmp" />
 
   </Package>
 </Wix>
