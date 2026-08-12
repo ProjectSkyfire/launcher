@@ -4,7 +4,8 @@
     <OutputName>SkyFireLauncherSetup</OutputName>
     <OutputType>Package</OutputType>
     <Platform>x64</Platform>
-    <DefineConstants>PublishDir=publish\win-x64</DefineConstants>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">1.0.0</ProductVersion>
+    <DefineConstants>PublishDir=publish\win-x64;ProductVersion=$(ProductVersion)</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

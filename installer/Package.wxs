@@ -3,7 +3,7 @@
 
   <Package Name="SkyFire Launcher"
            Manufacturer="Project SkyFire"
-           Version="1.0.0"
+           Version="$(var.ProductVersion)"
            UpgradeCode="839489CE-7CD2-4BB8-B100-B5C5F9C61550"
            Language="1033"
            Scope="perMachine">
