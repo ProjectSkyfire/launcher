@@ -1,6 +1,7 @@
-using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Input;
+using System.Windows.Media.Animation;
 using SkyFireLauncher.Configuration;
 using SkyFireLauncher.Realm;
 using WinForms = System.Windows.Forms;
@@ -36,6 +37,45 @@ public partial class MainWindow : Window
             x86Radio.IsChecked = true;
     }
 
+    private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2)
+            return;
+
+        DragMove();
+    }
+
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
+    private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
+
+    private void SettingsOpenButton_Click(object sender, RoutedEventArgs e) => ShowSettings(true);
+
+    private void SettingsCloseButton_Click(object sender, RoutedEventArgs e) => ShowSettings(false);
+
+    private void ShowSettings(bool show)
+    {
+        if (show)
+        {
+            SettingsPane.Visibility = Visibility.Visible;
+            var fade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)) { EasingFunction = new QuadraticEase() };
+            var slide = new DoubleAnimation(18, 0, TimeSpan.FromMilliseconds(220)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
+            SettingsPane.BeginAnimation(OpacityProperty, fade);
+            SettingsPaneTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slide);
+            LaunchPane.IsEnabled = false;
+        }
+        else
+        {
+            var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(140));
+            fade.Completed += (_, _) =>
+            {
+                SettingsPane.Visibility = Visibility.Collapsed;
+                LaunchPane.IsEnabled = true;
+            };
+            SettingsPane.BeginAnimation(OpacityProperty, fade);
+        }
+    }
+
     private void BrowseButton_Click(object sender, RoutedEventArgs e)
     {
         using var dialog = new WinForms.FolderBrowserDialog
@@ -64,7 +104,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Keep the launch tab's selector in sync with the newly saved default.
+        // Keep the launch pane's selector in sync with the newly saved default.
         SetVersionRadios(LaunchVersion32RadioButton, LaunchVersion64RadioButton, _config.DefaultVersion);
 
         System.Windows.MessageBox.Show("Configuration saved.", "SkyFire Launcher", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -77,7 +117,7 @@ public partial class MainWindow : Window
 
         if (string.IsNullOrWhiteSpace(_config.ClientLocation) || !Directory.Exists(_config.ClientLocation))
         {
-            LaunchStatusTextBlock.Text = "Client location is not set. Configure it on the Configuration tab first.";
+            LaunchStatusTextBlock.Text = "Client location is not set. Open Configuration (⚙) first.";
             return;
         }
 

@@ -3,5 +3,308 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
+        <SolidColorBrush x:Key="BgDeepBrush" Color="#070B14"/>
+        <SolidColorBrush x:Key="BgPanelBrush" Color="#121826"/>
+        <SolidColorBrush x:Key="BgPanelElevatedBrush" Color="#1A2233"/>
+        <SolidColorBrush x:Key="EmberBrush" Color="#C45A1A"/>
+        <SolidColorBrush x:Key="EmberHotBrush" Color="#E87828"/>
+        <SolidColorBrush x:Key="GoldBrush" Color="#F5D76E"/>
+        <SolidColorBrush x:Key="IceBrush" Color="#6EA8E0"/>
+        <SolidColorBrush x:Key="IceDeepBrush" Color="#1E4A9A"/>
+        <SolidColorBrush x:Key="TextBrush" Color="#E8EEF7"/>
+        <SolidColorBrush x:Key="MutedBrush" Color="#8B97AB"/>
+        <SolidColorBrush x:Key="DangerBrush" Color="#C43B2F"/>
+        <SolidColorBrush x:Key="BorderBrushKey" Color="#2A3548"/>
+        <SolidColorBrush x:Key="InputBgBrush" Color="#0C121E"/>
+
+        <FontFamily x:Key="DisplayFont">pack://application:,,,/Fonts/#Cinzel</FontFamily>
+        <FontFamily x:Key="BodyFont">pack://application:,,,/Fonts/#Source Sans 3</FontFamily>
+
+        <LinearGradientBrush x:Key="AtmosphereBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#1A0A08" Offset="0"/>
+            <GradientStop Color="#070B14" Offset="0.42"/>
+            <GradientStop Color="#081428" Offset="0.72"/>
+            <GradientStop Color="#0A1A3A" Offset="1"/>
+        </LinearGradientBrush>
+
+        <RadialGradientBrush x:Key="EmberGlowBrush" Center="0.2,0.85" RadiusX="0.55" RadiusY="0.45" GradientOrigin="0.15,0.9">
+            <GradientStop Color="#66C45A1A" Offset="0"/>
+            <GradientStop Color="#00C45A1A" Offset="1"/>
+        </RadialGradientBrush>
+
+        <RadialGradientBrush x:Key="IceGlowBrush" Center="0.85,0.15" RadiusX="0.5" RadiusY="0.45" GradientOrigin="0.9,0.1">
+            <GradientStop Color="#446EA8E0" Offset="0"/>
+            <GradientStop Color="#006EA8E0" Offset="1"/>
+        </RadialGradientBrush>
+
+        <LinearGradientBrush x:Key="PlayButtonBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#F0A03A" Offset="0"/>
+            <GradientStop Color="#C45A1A" Offset="0.55"/>
+            <GradientStop Color="#8A3510" Offset="1"/>
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="PlayButtonHoverBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#FFC45A" Offset="0"/>
+            <GradientStop Color="#E87828" Offset="0.5"/>
+            <GradientStop Color="#C45A1A" Offset="1"/>
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="FrameBorderBrush" StartPoint="0,0" EndPoint="1,0">
+            <GradientStop Color="#C45A1A" Offset="0"/>
+            <GradientStop Color="#F5D76E" Offset="0.5"/>
+            <GradientStop Color="#6EA8E0" Offset="1"/>
+        </LinearGradientBrush>
+
+        <Style x:Key="ChromeIconButton" TargetType="Button">
+            <Setter Property="Width" Value="36"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontFamily" Value="{StaticResource BodyFont}"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#22FFFFFF"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CloseIconButton" TargetType="Button">
+            <Setter Property="Width" Value="36"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontFamily" Value="{StaticResource BodyFont}"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#C43B2F"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#A32F25"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SecondaryButton" TargetType="Button">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="MinWidth" Value="96"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontFamily" Value="{StaticResource BodyFont}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="{StaticResource BgPanelElevatedBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource IceDeepBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="3"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource IceBrush}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="#243044"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1A2436"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PlayButton" TargetType="Button">
+            <Setter Property="Height" Value="52"/>
+            <Setter Property="MinWidth" Value="180"/>
+            <Setter Property="Foreground" Value="#1A0C04"/>
+            <Setter Property="FontFamily" Value="{StaticResource DisplayFont}"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border x:Name="Glow"
+                                    CornerRadius="4"
+                                    Margin="-4"
+                                    Opacity="0.55"
+                                    Background="{StaticResource EmberHotBrush}">
+                                <Border.Effect>
+                                    <BlurEffect Radius="16"/>
+                                </Border.Effect>
+                            </Border>
+                            <Border x:Name="Bd"
+                                    Background="{StaticResource PlayButtonBrush}"
+                                    BorderBrush="{StaticResource GoldBrush}"
+                                    BorderThickness="1.5"
+                                    CornerRadius="4"
+                                    Padding="28,0">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource PlayButtonHoverBrush}"/>
+                                <Setter TargetName="Glow" Property="Opacity" Value="0.85"/>
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <ThicknessAnimation Storyboard.TargetName="Bd"
+                                                                Storyboard.TargetProperty="Margin"
+                                                                To="0,-2,0,2"
+                                                                Duration="0:0:0.12"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <ThicknessAnimation Storyboard.TargetName="Bd"
+                                                                Storyboard.TargetProperty="Margin"
+                                                                To="0"
+                                                                Duration="0:0:0.12"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource EmberBrush}"/>
+                            </Trigger>
+                            <EventTrigger RoutedEvent="Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                        <DoubleAnimation Storyboard.TargetName="Glow"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         From="0.35" To="0.7"
+                                                         Duration="0:0:1.6"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="LauncherTextBox" TargetType="TextBox">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="CaretBrush" Value="{StaticResource GoldBrush}"/>
+            <Setter Property="Background" Value="{StaticResource InputBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrushKey}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontFamily" Value="{StaticResource BodyFont}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource IceBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource IceDeepBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+            <Setter Property="FontFamily" Value="{StaticResource BodyFont}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
+
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource GoldBrush}"/>
+            <Setter Property="FontFamily" Value="{StaticResource DisplayFont}"/>
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,16"/>
+        </Style>
+
+        <Style x:Key="VersionRadio" TargetType="RadioButton">
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+            <Setter Property="FontFamily" Value="{StaticResource BodyFont}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd"
+                                Background="#181F2E"
+                                BorderBrush="{StaticResource BorderBrushKey}"
+                                BorderThickness="1"
+                                CornerRadius="3"
+                                Padding="14,8"
+                                MinWidth="88">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#2A1A10"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource EmberHotBrush}"/>
+                                <Setter Property="Foreground" Value="{StaticResource GoldBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource IceBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Application.Resources>
 </Application>

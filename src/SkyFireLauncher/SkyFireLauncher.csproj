@@ -19,6 +19,9 @@
 
   <ItemGroup>
     <Resource Include="AppIcon.ico" />
+    <Resource Include="Assets\skyfire-launcher-logo.png" />
+    <Resource Include="Fonts\*.ttf" />
+    <Resource Include="Fonts\*.otf" />
   </ItemGroup>
 
 </Project>
