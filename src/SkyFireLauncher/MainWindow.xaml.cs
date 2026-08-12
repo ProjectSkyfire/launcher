@@ -53,7 +53,16 @@ public partial class MainWindow : Window
         _config.ClientLocation = ClientLocationTextBox.Text;
         _config.DefaultVersion = Version64RadioButton.IsChecked == true ? ClientVersion.X64 : ClientVersion.X86;
         _config.LoginAddress = LoginAddressTextBox.Text;
-        _configManager.Save(_config);
+
+        try
+        {
+            _configManager.Save(_config);
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show($"Failed to save configuration: {ex.Message}", "SkyFire Launcher", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
 
         // Keep the launch tab's selector in sync with the newly saved default.
         SetVersionRadios(LaunchVersion32RadioButton, LaunchVersion64RadioButton, _config.DefaultVersion);

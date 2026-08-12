@@ -11,8 +11,11 @@ public class ConfigManager
 
     public ConfigManager()
     {
-        var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        _configPath = Path.Combine(baseDir, "config.json");
+        // Program Files (where the installer puts the exe) isn't writable by
+        // standard users - keep the config in the per-user app data folder instead.
+        var appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SkyFireLauncher");
+        Directory.CreateDirectory(appDataDir);
+        _configPath = Path.Combine(appDataDir, "config.json");
     }
 
     public AppConfig Load()
