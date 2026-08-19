@@ -78,6 +78,90 @@ public partial class MainWindow : Window
         }
     }
 
+    private void MigrateOpenButton_Click(object sender, RoutedEventArgs e)
+    {
+        ShowSettings(false);
+        ShowMigrate(true);
+    }
+
+    private void MigrateCloseButton_Click(object sender, RoutedEventArgs e) => ShowMigrate(false);
+
+    private void ShowMigrate(bool show)
+    {
+        if (show)
+        {
+            MigrateStatusTextBlock.Text = string.Empty;
+            MigratePane.Visibility = Visibility.Visible;
+            var fade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)) { EasingFunction = new QuadraticEase() };
+            var slide = new DoubleAnimation(18, 0, TimeSpan.FromMilliseconds(220)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
+            MigratePane.BeginAnimation(OpacityProperty, fade);
+            MigratePaneTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slide);
+            LaunchPane.IsEnabled = false;
+        }
+        else
+        {
+            var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(140));
+            fade.Completed += (_, _) =>
+            {
+                MigratePane.Visibility = Visibility.Collapsed;
+                LaunchPane.IsEnabled = true;
+            };
+            MigratePane.BeginAnimation(OpacityProperty, fade);
+        }
+    }
+
+    private async void MigrateSubmitButton_Click(object sender, RoutedEventArgs e)
+    {
+        var username = MigrateUsernameTextBox.Text.Trim();
+        var oldPassword = MigrateOldPasswordBox.Password;
+        var email = MigrateEmailTextBox.Text.Trim();
+        var newPassword = MigrateNewPasswordBox.Password;
+        var confirmPassword = MigrateConfirmPasswordBox.Password;
+
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(oldPassword) ||
+            string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(newPassword))
+        {
+            MigrateStatusTextBlock.Text = "Fill in every field.";
+            return;
+        }
+
+        if (newPassword != confirmPassword)
+        {
+            MigrateStatusTextBlock.Text = "New password and confirmation do not match.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_config.LoginAddress))
+        {
+            MigrateStatusTextBlock.Text = "Login address is not set. Configure it above first.";
+            return;
+        }
+
+        MigrateSubmitButton.IsEnabled = false;
+        MigrateStatusTextBlock.Text = "Migrating…";
+
+        try
+        {
+            var result = await AccountMigrationClient.MigrateAsync(_config.LoginAddress, username, oldPassword, email, newPassword);
+            MigrateStatusTextBlock.Text = result.ToDisplayMessage();
+
+            if (result == AuthMigrateResult.Ok)
+            {
+                MigrateOldPasswordBox.Password = string.Empty;
+                MigrateNewPasswordBox.Password = string.Empty;
+                MigrateConfirmPasswordBox.Password = string.Empty;
+            }
+        }
+        catch (Exception ex)
+        {
+            MigrateStatusTextBlock.Text = $"Migration failed: {ex.Message}";
+        }
+        finally
+        {
+            MigrateSubmitButton.IsEnabled = true;
+        }
+    }
+
     private void BrowseButton_Click(object sender, RoutedEventArgs e)
     {
         using var dialog = new WinForms.FolderBrowserDialog

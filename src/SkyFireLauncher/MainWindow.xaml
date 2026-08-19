@@ -220,7 +220,14 @@
 
                                 <CheckBox x:Name="EnableAuthnetLoginCheckBox"
                                           Content="Enable authnet (Battle.net-style) login [experimental]"
-                                          Style="{StaticResource LauncherCheckBox}"/>
+                                          Style="{StaticResource LauncherCheckBox}"
+                                          Margin="0,0,0,16"/>
+
+                                <Button x:Name="MigrateOpenButton"
+                                        Content="Migrate Account to Email Login…"
+                                        Style="{StaticResource SecondaryButton}"
+                                        HorizontalAlignment="Left"
+                                        Click="MigrateOpenButton_Click"/>
                             </StackPanel>
 
                             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
@@ -233,6 +240,97 @@
                                         Style="{StaticResource SecondaryButton}"
                                         BorderBrush="{StaticResource EmberHotBrush}"
                                         Click="SaveButton_Click"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- Migrate account overlay -->
+                <Grid x:Name="MigratePane"
+                      Grid.Row="1"
+                      Visibility="Collapsed"
+                      Opacity="0">
+                    <Grid.RenderTransform>
+                        <TranslateTransform x:Name="MigratePaneTransform" Y="18"/>
+                    </Grid.RenderTransform>
+
+                    <Border Background="#E6070B14"/>
+
+                    <Border Background="{StaticResource BgPanelBrush}"
+                            BorderBrush="{StaticResource FrameBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="28,24"
+                            MaxWidth="520"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Margin="24">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0" Margin="0,0,0,8">
+                                <TextBlock Text="Migrate Account" Style="{StaticResource SectionTitle}" Margin="0"/>
+                                <Button HorizontalAlignment="Right"
+                                        Style="{StaticResource ChromeIconButton}"
+                                        Content="✕"
+                                        ToolTip="Back"
+                                        Click="MigrateCloseButton_Click"/>
+                            </Grid>
+
+                            <StackPanel Grid.Row="1" Margin="0,8,0,16">
+                                <TextBlock Text="Converts a legacy username account to email login. You will use the email and new password to log in afterward."
+                                           FontFamily="{StaticResource BodyFont}"
+                                           FontSize="12"
+                                           Foreground="{StaticResource MutedBrush}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,0,0,16"/>
+
+                                <TextBlock Text="Username" Style="{StaticResource FieldLabel}"/>
+                                <TextBox x:Name="MigrateUsernameTextBox"
+                                         Style="{StaticResource LauncherTextBox}"
+                                         Margin="0,0,0,16"/>
+
+                                <TextBlock Text="Current Password" Style="{StaticResource FieldLabel}"/>
+                                <PasswordBox x:Name="MigrateOldPasswordBox"
+                                             Style="{StaticResource LauncherPasswordBox}"
+                                             Margin="0,0,0,16"/>
+
+                                <TextBlock Text="New Email" Style="{StaticResource FieldLabel}"/>
+                                <TextBox x:Name="MigrateEmailTextBox"
+                                         Style="{StaticResource LauncherTextBox}"
+                                         Margin="0,0,0,16"/>
+
+                                <TextBlock Text="New Password" Style="{StaticResource FieldLabel}"/>
+                                <PasswordBox x:Name="MigrateNewPasswordBox"
+                                             Style="{StaticResource LauncherPasswordBox}"
+                                             Margin="0,0,0,16"/>
+
+                                <TextBlock Text="Confirm New Password" Style="{StaticResource FieldLabel}"/>
+                                <PasswordBox x:Name="MigrateConfirmPasswordBox"
+                                             Style="{StaticResource LauncherPasswordBox}"
+                                             Margin="0,0,0,16"/>
+
+                                <TextBlock x:Name="MigrateStatusTextBlock"
+                                           FontFamily="{StaticResource BodyFont}"
+                                           FontSize="12"
+                                           Foreground="{StaticResource MutedBrush}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="Back"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Margin="0,0,10,0"
+                                        Click="MigrateCloseButton_Click"/>
+                                <Button x:Name="MigrateSubmitButton"
+                                        Content="Migrate"
+                                        Style="{StaticResource SecondaryButton}"
+                                        BorderBrush="{StaticResource EmberHotBrush}"
+                                        Click="MigrateSubmitButton_Click"/>
                             </StackPanel>
                         </Grid>
                     </Border>
