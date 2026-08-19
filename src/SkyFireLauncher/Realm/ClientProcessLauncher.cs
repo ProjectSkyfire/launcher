@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -34,7 +35,7 @@ public static class ClientProcessLauncher
         ("us.logon.worldofwarcraft.com:3724", "{0}:3724")
     ];
 
-    public static void LaunchAndRedirect(string exePath, string workingDirectory, string targetAddress)
+    public static void LaunchAndRedirect(string exePath, string workingDirectory, string targetAddress, bool enableAuthnetLogin = false)
     {
         var startupInfo = new STARTUPINFO();
         startupInfo.cb = Marshal.SizeOf<STARTUPINFO>();
@@ -48,7 +49,7 @@ public static class ClientProcessLauncher
 
         try
         {
-            PatchHostnames(processInfo.dwProcessId, exePath, targetAddress);
+            PatchHostnames(processInfo.dwProcessId, exePath, targetAddress, enableAuthnetLogin);
         }
         catch
         {
@@ -64,7 +65,7 @@ public static class ClientProcessLauncher
         }
     }
 
-    private static void PatchHostnames(int processId, string exePath, string targetAddress)
+    private static void PatchHostnames(int processId, string exePath, string targetAddress, bool enableAuthnetLogin)
     {
         var exeFileName = Path.GetFileName(exePath);
         var (baseAddress, moduleSize) = GetMainModuleInfo(processId, exeFileName);
@@ -113,7 +114,19 @@ public static class ClientProcessLauncher
             // Battle.net/Agent protocol, which SkyFire's authserver doesn't
             // speak. These patches force it into the classic realmList-based
             // connect flow instead, which does match SkyFire's protocol.
+            //
+            // "Email" is the one patch responsible for that: it forces the
+            // client's login-service selector to always build GruntLogin,
+            // even for an email-shaped login that would otherwise route to
+            // BattlenetLogin. Skipping it when authnet login is enabled lets
+            // plain usernames keep working through GRUNT (the "User" patch
+            // still lets those past the client's own email-only UI gate)
+            // while an email address takes the real BattlenetLogin path
+            // toward realmListbn instead.
             var loginFlowPatches = is64Bit ? LoginFlowPatches.X64 : LoginFlowPatches.X86;
+            if (enableAuthnetLogin)
+                loginFlowPatches = loginFlowPatches.Where(p => p.Name != "Email").ToArray();
+
             foreach (var (_, pattern, replacement) in loginFlowPatches)
             {
                 var matchOffset = IndexOfWildcard(buffer, pattern, 0);

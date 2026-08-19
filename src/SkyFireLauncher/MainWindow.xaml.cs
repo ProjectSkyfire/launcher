@@ -25,6 +25,7 @@ public partial class MainWindow : Window
         ClientLocationTextBox.Text = _config.ClientLocation;
         LoginAddressTextBox.Text = _config.LoginAddress;
         ClearCacheOnLoginCheckBox.IsChecked = _config.ClearCacheOnLogin;
+        EnableAuthnetLoginCheckBox.IsChecked = _config.EnableAuthnetLogin;
 
         SetVersionRadios(Version32RadioButton, Version64RadioButton, _config.DefaultVersion);
         SetVersionRadios(LaunchVersion32RadioButton, LaunchVersion64RadioButton, _config.DefaultVersion);
@@ -95,6 +96,7 @@ public partial class MainWindow : Window
         _config.DefaultVersion = Version64RadioButton.IsChecked == true ? ClientVersion.X64 : ClientVersion.X86;
         _config.LoginAddress = LoginAddressTextBox.Text;
         _config.ClearCacheOnLogin = ClearCacheOnLoginCheckBox.IsChecked == true;
+        _config.EnableAuthnetLogin = EnableAuthnetLoginCheckBox.IsChecked == true;
 
         try
         {
@@ -136,7 +138,11 @@ public partial class MainWindow : Window
                 ClearClientCache(_config.ClientLocation);
 
             RealmlistConfigWriter.SetRealmlist(_config.ClientLocation, _config.LoginAddress);
-            ClientProcessLauncher.LaunchAndRedirect(exePath, _config.ClientLocation, _config.LoginAddress);
+
+            if (_config.EnableAuthnetLogin)
+                RealmlistConfigWriter.SetRealmlistBn(_config.ClientLocation, _config.LoginAddress);
+
+            ClientProcessLauncher.LaunchAndRedirect(exePath, _config.ClientLocation, _config.LoginAddress, _config.EnableAuthnetLogin);
             LaunchStatusTextBlock.Text = $"Launched {exeName}, redirected to {_config.LoginAddress}.";
         }
         catch (Exception ex)

@@ -215,6 +215,11 @@
 
                                 <CheckBox x:Name="ClearCacheOnLoginCheckBox"
                                           Content="Clear client cache on each login"
+                                          Style="{StaticResource LauncherCheckBox}"
+                                          Margin="0,0,0,10"/>
+
+                                <CheckBox x:Name="EnableAuthnetLoginCheckBox"
+                                          Content="Enable authnet (Battle.net-style) login [experimental]"
                                           Style="{StaticResource LauncherCheckBox}"/>
                             </StackPanel>
 
