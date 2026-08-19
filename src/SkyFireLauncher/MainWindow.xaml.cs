@@ -24,6 +24,7 @@ public partial class MainWindow : Window
         _config = _configManager.Load();
         ClientLocationTextBox.Text = _config.ClientLocation;
         LoginAddressTextBox.Text = _config.LoginAddress;
+        ClearCacheOnLoginCheckBox.IsChecked = _config.ClearCacheOnLogin;
 
         SetVersionRadios(Version32RadioButton, Version64RadioButton, _config.DefaultVersion);
         SetVersionRadios(LaunchVersion32RadioButton, LaunchVersion64RadioButton, _config.DefaultVersion);
@@ -93,6 +94,7 @@ public partial class MainWindow : Window
         _config.ClientLocation = ClientLocationTextBox.Text;
         _config.DefaultVersion = Version64RadioButton.IsChecked == true ? ClientVersion.X64 : ClientVersion.X86;
         _config.LoginAddress = LoginAddressTextBox.Text;
+        _config.ClearCacheOnLogin = ClearCacheOnLoginCheckBox.IsChecked == true;
 
         try
         {
@@ -130,6 +132,9 @@ public partial class MainWindow : Window
 
         try
         {
+            if (_config.ClearCacheOnLogin)
+                ClearClientCache(_config.ClientLocation);
+
             RealmlistConfigWriter.SetRealmlist(_config.ClientLocation, _config.LoginAddress);
             ClientProcessLauncher.LaunchAndRedirect(exePath, _config.ClientLocation, _config.LoginAddress);
             LaunchStatusTextBlock.Text = $"Launched {exeName}, redirected to {_config.LoginAddress}.";
@@ -138,5 +143,12 @@ public partial class MainWindow : Window
         {
             LaunchStatusTextBlock.Text = $"Failed to launch: {ex.Message}";
         }
+    }
+
+    private static void ClearClientCache(string clientLocation)
+    {
+        var cachePath = Path.Combine(clientLocation, "Cache");
+        if (Directory.Exists(cachePath))
+            Directory.Delete(cachePath, recursive: true);
     }
 }

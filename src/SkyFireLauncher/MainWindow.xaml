@@ -210,7 +210,12 @@
 
                                 <TextBlock Text="Login Address" Style="{StaticResource FieldLabel}"/>
                                 <TextBox x:Name="LoginAddressTextBox"
-                                         Style="{StaticResource LauncherTextBox}"/>
+                                         Style="{StaticResource LauncherTextBox}"
+                                         Margin="0,0,0,16"/>
+
+                                <CheckBox x:Name="ClearCacheOnLoginCheckBox"
+                                          Content="Clear client cache on each login"
+                                          Style="{StaticResource LauncherCheckBox}"/>
                             </StackPanel>
 
                             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
