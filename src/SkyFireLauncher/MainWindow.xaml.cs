@@ -10,6 +10,10 @@ namespace SkyFireLauncher;
 
 public partial class MainWindow : Window
 {
+    // The client's own BattlenetLogin CVar (realmListbn) is written with an
+    // explicit port rather than relying on any client-side default port.
+    private const ushort AuthnetGamePort = 1119;
+
     private readonly ConfigManager _configManager = new();
     private AppConfig _config = new();
 
@@ -224,7 +228,14 @@ public partial class MainWindow : Window
             RealmlistConfigWriter.SetRealmlist(_config.ClientLocation, _config.LoginAddress);
 
             if (_config.EnableAuthnetLogin)
-                RealmlistConfigWriter.SetRealmlistBn(_config.ClientLocation, _config.LoginAddress);
+            {
+                // GruntLogin has a confirmed hardcoded fallback to port 3724
+                // when realmlist carries no port. BattlenetLogin's equivalent
+                // default (if any) was never confirmed in the client, so
+                // don't rely on it - always write the port explicitly.
+                var loginHost = _config.LoginAddress.Split(':')[0];
+                RealmlistConfigWriter.SetRealmlistBn(_config.ClientLocation, $"{loginHost}:{AuthnetGamePort}");
+            }
 
             ClientProcessLauncher.LaunchAndRedirect(exePath, _config.ClientLocation, _config.LoginAddress, _config.EnableAuthnetLogin);
             LaunchStatusTextBlock.Text = $"Launched {exeName}, redirected to {_config.LoginAddress}.";
