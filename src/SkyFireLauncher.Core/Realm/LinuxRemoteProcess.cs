@@ -152,6 +152,30 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
             $"Timed out waiting for {fileName} to appear in a Wine/Proton process. Is the compatibility layer installed and able to start this client?");
     }
 
+    public static void WaitForMappedDll(int pid, string dllFileName, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (!Directory.Exists($"/proc/{pid}"))
+                throw new InvalidOperationException("The client process exited before graphics DLLs finished loading.");
+
+            foreach (var map in ParseMaps(pid))
+            {
+                if (string.IsNullOrEmpty(map.Path))
+                    continue;
+
+                var mapFileName = Path.GetFileName(map.Path.Replace('\\', '/'));
+                if (mapFileName.Equals(dllFileName, StringComparison.OrdinalIgnoreCase))
+                    return;
+            }
+
+            Thread.Sleep(50);
+        }
+
+        // Best-effort: some prefixes rename/override; proceed and let the alive check decide.
+    }
+
     public static (nint BaseAddress, int ModuleSize) FindPeModule(int pid, string exePath, byte[] fileBuffer)
     {
         var fileName = Path.GetFileName(exePath);
@@ -226,14 +250,21 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
         if (_attachedTids.Count == 0)
         {
             throw new InvalidOperationException(
-                "Could not attach to the client process (ptrace). Check kernel.yama.ptrace_scope, and run the launcher as the same user that owns the Wine process.");
+                "Could not attach to the client process (ptrace). " +
+                "Steam Linux Runtime / *-slr Proton builds block host ptrace — pick GE-Proton or proton-cachyos-native. " +
+                "Also check kernel.yama.ptrace_scope (0 or 1) and run the launcher as the same user that owns the Wine process.");
         }
     }
 
     private void DetachAllThreads()
     {
         foreach (var tid in _attachedTids)
+        {
+            // Continue first so a leftover SIGTRAP/SIGSTOP cannot kill the client
+            // right after a successful patch.
+            Native.ptrace(Native.PTRACE_CONT, tid, 0, 0);
             Native.ptrace(Native.PTRACE_DETACH, tid, 0, 0);
+        }
 
         _attachedTids.Clear();
     }

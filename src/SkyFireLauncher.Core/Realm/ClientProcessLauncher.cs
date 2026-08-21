@@ -11,7 +11,7 @@ namespace SkyFireLauncher.Realm;
 // its lifetime.
 public static class ClientProcessLauncher
 {
-    public static void LaunchAndRedirect(
+    public static int LaunchAndRedirect(
         string exePath,
         string workingDirectory,
         string targetAddress,
@@ -19,11 +19,15 @@ public static class ClientProcessLauncher
         LinuxLaunchOptions? linuxOptions = null)
     {
         if (OperatingSystem.IsWindows())
+        {
             LaunchWindows(exePath, workingDirectory, targetAddress, enableAuthnetLogin);
-        else if (OperatingSystem.IsLinux())
-            LaunchLinux(exePath, workingDirectory, targetAddress, enableAuthnetLogin, linuxOptions ?? new LinuxLaunchOptions());
-        else
-            throw new PlatformNotSupportedException("SkyFire Launcher can start the client on Windows or Linux (via Wine or Proton).");
+            return 0;
+        }
+
+        if (OperatingSystem.IsLinux())
+            return LaunchLinux(exePath, workingDirectory, targetAddress, enableAuthnetLogin, linuxOptions ?? new LinuxLaunchOptions());
+
+        throw new PlatformNotSupportedException("SkyFire Launcher can start the client on Windows or Linux (via Wine or Proton).");
     }
 
     private static void LaunchWindows(string exePath, string workingDirectory, string targetAddress, bool enableAuthnetLogin)
@@ -59,7 +63,7 @@ public static class ClientProcessLauncher
         }
     }
 
-    private static void LaunchLinux(
+    private static int LaunchLinux(
         string exePath,
         string workingDirectory,
         string targetAddress,
@@ -77,7 +81,7 @@ public static class ClientProcessLauncher
 
         try
         {
-            StartAndPatch(startInfo, exePath, targetAddress, enableAuthnetLogin, LinuxClientRuntime.ReadyTimeout(linuxOptions.Layer));
+            return StartAndPatch(startInfo, exePath, targetAddress, enableAuthnetLogin, LinuxClientRuntime.ReadyTimeout(linuxOptions.Layer));
         }
         catch (Exception ex) when (linuxOptions.Layer == LinuxCompatibilityLayer.Proton && IsAttachFailure(ex))
         {
@@ -92,11 +96,11 @@ public static class ClientProcessLauncher
                 linuxOptions.ProtonPrefixPath,
                 is64BitClient);
 
-            StartAndPatch(fallback, exePath, targetAddress, enableAuthnetLogin, LinuxClientRuntime.ReadyTimeout(linuxOptions.Layer));
+            return StartAndPatch(fallback, exePath, targetAddress, enableAuthnetLogin, LinuxClientRuntime.ReadyTimeout(linuxOptions.Layer));
         }
     }
 
-    private static void StartAndPatch(
+    private static int StartAndPatch(
         ProcessStartInfo startInfo,
         string exePath,
         string targetAddress,
@@ -113,24 +117,31 @@ public static class ClientProcessLauncher
         try
         {
             clientPid = LinuxRemoteProcess.WaitForMappedModule(exePath, hostProcess.Id, timeout);
-            using var process = new LinuxRemoteProcess(clientPid.Value);
-            var fileBuffer = File.ReadAllBytes(exePath);
-            var (baseAddress, moduleSize) = LinuxRemoteProcess.FindPeModule(clientPid.Value, exePath, fileBuffer);
-            ClientImagePatcher.Apply(process, baseAddress, moduleSize, exePath, targetAddress, enableAuthnetLogin);
+            // Wait until graphics imports are in place so we do not freeze the
+            // loader mid-d3d9 init with a full-process ptrace attach.
+            LinuxRemoteProcess.WaitForMappedDll(clientPid.Value, "d3d9.dll", TimeSpan.FromSeconds(30));
 
-            // Wow can appear in /proc/*/maps before import resolution finishes.
-            // If d3d9/DXVK is missing, the process dies right after we patch.
-            if (!WaitForClientStillAlive(clientPid.Value, TimeSpan.FromSeconds(2)))
+            using (var process = new LinuxRemoteProcess(clientPid.Value))
+            {
+                var fileBuffer = File.ReadAllBytes(exePath);
+                var (baseAddress, moduleSize) = LinuxRemoteProcess.FindPeModule(clientPid.Value, exePath, fileBuffer);
+                ClientImagePatcher.Apply(process, baseAddress, moduleSize, exePath, targetAddress, enableAuthnetLogin);
+            }
+
+            // Wow can appear in /proc/*/maps before it is actually stable.
+            if (!WaitForClientStillAlive(clientPid.Value, TimeSpan.FromSeconds(8)))
             {
                 var logHint = startInfo.Environment.TryGetValue("SKYFIRE_LAUNCH_LOG", out var log) &&
                               !string.IsNullOrWhiteSpace(log)
                     ? $" See {log}."
                     : string.Empty;
                 throw new InvalidOperationException(
-                    "The client exited immediately after launch (often missing DXVK d3d9.dll in the Proton prefix). " +
-                    "Delete ~/.local/share/SkyFireLauncher/proton, pick GE-Proton or Steam Proton 9+, and try again." +
+                    "The client exited shortly after launch. " +
+                    "Delete ~/.local/share/SkyFireLauncher/proton, pick GE-Proton (not *-slr), and try again." +
                     logHint);
             }
+
+            return clientPid.Value;
         }
         catch
         {

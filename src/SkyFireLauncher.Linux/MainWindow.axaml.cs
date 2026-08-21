@@ -253,7 +253,7 @@ public partial class MainWindow : Window
                 RealmlistConfigWriter.SetRealmlistBn(_config.ClientLocation, $"{loginHost}:{AuthnetGamePort}");
             }
 
-            ClientProcessLauncher.LaunchAndRedirect(
+            var clientPid = ClientProcessLauncher.LaunchAndRedirect(
                 exePath,
                 _config.ClientLocation,
                 _config.LoginAddress,
@@ -266,7 +266,9 @@ public partial class MainWindow : Window
                 });
 
             var runtime = _config.LinuxRuntime == LinuxCompatibilityLayer.Proton ? "Proton" : "Wine";
-            LaunchStatusTextBlock.Text = $"Launched {exeName} via {runtime}, redirected to {_config.LoginAddress}.";
+            LaunchStatusTextBlock.Text = clientPid > 0
+                ? $"Launched {exeName} via {runtime} (pid {clientPid}), redirected to {_config.LoginAddress}."
+                : $"Launched {exeName} via {runtime}, redirected to {_config.LoginAddress}.";
         }
         catch (Exception ex)
         {

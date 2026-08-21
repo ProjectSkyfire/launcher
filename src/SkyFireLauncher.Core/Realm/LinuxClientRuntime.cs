@@ -88,7 +88,7 @@ public static class LinuxClientRuntime
             ?? throw new InvalidOperationException(
                 "No Proton install was found. Install Steam Proton or Proton-GE, or switch Compatibility to Wine.");
 
-        return BuildProtonStartInfo(proton, exePath, workingDirectory, protonPrefixPath);
+        return BuildProtonStartInfo(proton, exePath, workingDirectory, protonPrefixPath, is64BitClient);
     }
 
     public static ProcessStartInfo BuildProtonWineFallbackStartInfo(
@@ -98,10 +98,6 @@ public static class LinuxClientRuntime
         string? protonPrefixPath,
         bool is64BitClient)
     {
-        var wine = FindProtonWineBinary(protonInstallPath, is64BitClient)
-            ?? throw new InvalidOperationException(
-                "Proton was found, but its wine binary is missing. Try a different Proton version or Wine.");
-
         var prefix = ResolvePrefix(protonPrefixPath);
         Directory.CreateDirectory(prefix);
         StopPrefixWineServer(prefix, protonInstallPath);
@@ -111,16 +107,8 @@ public static class LinuxClientRuntime
                 BuildMissingDxvkMessage(protonInstallPath, umuAvailable: false));
         }
 
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = wine,
-            WorkingDirectory = workingDirectory,
-            UseShellExecute = false,
-        };
-        startInfo.ArgumentList.Add(exePath);
-        startInfo.Environment["WINEPREFIX"] = Path.Combine(prefix, "pfx");
-        ApplyProtonEnvironment(startInfo, protonInstallPath, prefix);
-        return startInfo;
+        return BuildDirectProtonWineStartInfo(
+            protonInstallPath, exePath, workingDirectory, prefix, is64BitClient);
     }
 
     /// <summary>
@@ -197,54 +185,142 @@ public static class LinuxClientRuntime
         ProtonInstall proton,
         string exePath,
         string workingDirectory,
-        string? protonPrefixPath)
+        string? protonPrefixPath,
+        bool is64BitClient)
     {
         var prefix = ResolvePrefix(protonPrefixPath);
         Directory.CreateDirectory(prefix);
-        StopPrefixWineServer(prefix, proton.InstallPath);
 
         var umu = FindOnPath("umu-run") ?? FindOnPath("umu");
-        var hasDxvk = TryEnsureProtonGraphicsStack(proton.InstallPath, prefix);
+        var selected = PreferAttachableProton(proton);
+        StopPrefixWineServer(prefix, selected.InstallPath);
+        var hasDxvk = TryEnsureProtonGraphicsStack(selected.InstallPath, prefix);
 
-        // proton-cachyos-native (and similar) may ship no host-side DXVK. Prefer
-        // umu's GE-Proton codename so a complete Proton+DXVK tree is downloaded.
-        var protonPath = proton.InstallPath;
-        var useGeProtonDownload = false;
+        // Prefer an on-disk GE-Proton (umu may already have downloaded it) over a
+        // Proton build that ships no host-side DXVK (e.g. proton-cachyos-native).
         if (!hasDxvk)
         {
-            if (umu is null)
-                throw new InvalidOperationException(BuildMissingDxvkMessage(proton.InstallPath, umuAvailable: false));
-
-            protonPath = "GE-Proton";
-            useGeProtonDownload = true;
+            var ge = FindInstalledGeProton();
+            if (ge is not null &&
+                !ge.InstallPath.Equals(selected.InstallPath, StringComparison.OrdinalIgnoreCase))
+            {
+                selected = ge;
+                StopPrefixWineServer(prefix, selected.InstallPath);
+                hasDxvk = TryEnsureProtonGraphicsStack(selected.InstallPath, prefix);
+            }
         }
 
+        if (hasDxvk)
+        {
+            // Launch Proton's wine binary directly. The `proton`/`umu` wrappers
+            // enter Steam Linux Runtime (esp. *-slr builds), which blocks host
+            // ptrace and breaks in-memory patches.
+            return BuildDirectProtonWineStartInfo(
+                selected.InstallPath, exePath, workingDirectory, prefix, is64BitClient);
+        }
+
+        if (umu is null)
+            throw new InvalidOperationException(BuildMissingDxvkMessage(selected.InstallPath, umuAvailable: false));
+
+        // First-time GE download via umu, with Steam runtime disabled for ptrace.
         var startInfo = new ProcessStartInfo
         {
             WorkingDirectory = workingDirectory,
             UseShellExecute = false,
+            FileName = umu,
         };
-
-        if (umu is not null)
-        {
-            startInfo.FileName = umu;
-            startInfo.ArgumentList.Add(exePath);
-            startInfo.Environment["PROTONPATH"] = protonPath;
-            // Generic non-Steam ID so umu still installs DXVK/vkd3d into the prefix.
-            startInfo.Environment["GAMEID"] = "0";
-        }
-        else
-        {
-            startInfo.FileName = proton.ProtonScriptPath;
-            startInfo.ArgumentList.Add("run");
-            startInfo.ArgumentList.Add(exePath);
-        }
-
-        ApplyProtonEnvironment(startInfo, useGeProtonDownload ? proton.InstallPath : protonPath, prefix);
-        if (useGeProtonDownload)
-            startInfo.Environment["PROTONPATH"] = "GE-Proton";
-
+        startInfo.ArgumentList.Add(exePath);
+        startInfo.Environment["PROTONPATH"] = "GE-Proton";
+        startInfo.Environment["GAMEID"] = "0";
+        startInfo.Environment["UMU_NO_RUNTIME"] = "1";
+        startInfo.Environment["PROTON_NO_STEAM_RUNTIME"] = "1";
+        ApplyProtonEnvironment(startInfo, selected.InstallPath, prefix);
+        startInfo.Environment["PROTONPATH"] = "GE-Proton";
         return startInfo;
+    }
+
+    private static ProcessStartInfo BuildDirectProtonWineStartInfo(
+        string protonInstallPath,
+        string exePath,
+        string workingDirectory,
+        string prefix,
+        bool is64BitClient)
+    {
+        var wine = FindProtonWineBinary(protonInstallPath, is64BitClient)
+            ?? throw new InvalidOperationException(
+                "Proton was found, but its wine binary is missing. Try GE-Proton or Wine.");
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = wine,
+            WorkingDirectory = workingDirectory,
+            UseShellExecute = false,
+        };
+        startInfo.ArgumentList.Add(exePath);
+        startInfo.Environment["WINEPREFIX"] = Path.Combine(prefix, "pfx");
+        ApplyProtonEnvironment(startInfo, protonInstallPath, prefix);
+        ApplyProtonHostLibraryPath(startInfo, protonInstallPath);
+        return startInfo;
+    }
+
+    private static void ApplyProtonHostLibraryPath(ProcessStartInfo startInfo, string protonInstallPath)
+    {
+        // Without the `proton` wrapper we must point the dynamic linker at Proton's
+        // own libs or wine may load mismatched system libraries.
+        var dirs = new List<string>();
+        foreach (var rel in new[]
+                 {
+                     "files/lib64",
+                     "files/lib",
+                     "files/lib64/wine/x86_64-unix",
+                     "files/lib/wine/i386-unix",
+                     "dist/lib64",
+                     "dist/lib",
+                 })
+        {
+            var full = Path.Combine(protonInstallPath, rel);
+            if (Directory.Exists(full))
+                dirs.Add(full);
+        }
+
+        if (dirs.Count == 0)
+            return;
+
+        var joined = string.Join(':', dirs);
+        if (startInfo.Environment.TryGetValue("LD_LIBRARY_PATH", out var existing) &&
+            !string.IsNullOrWhiteSpace(existing))
+            startInfo.Environment["LD_LIBRARY_PATH"] = joined + ":" + existing;
+        else
+            startInfo.Environment["LD_LIBRARY_PATH"] = joined;
+
+        var dllPath = string.Join(':', dirs.Select(d => Path.Combine(d, "wine")).Where(Directory.Exists));
+        if (!string.IsNullOrEmpty(dllPath))
+            startInfo.Environment["WINEDLLPATH"] = dllPath;
+    }
+
+    private static ProtonInstall PreferAttachableProton(ProtonInstall selected)
+    {
+        // *-slr builds always enter pressure-vessel; prefer GE/native for ptrace.
+        if (!IsSteamRuntimeProton(selected.DisplayName) &&
+            !IsSteamRuntimeProton(selected.InstallPath))
+            return selected;
+
+        return FindInstalledGeProton()
+               ?? DiscoverProtonInstalls().FirstOrDefault(p => !IsSteamRuntimeProton(p.DisplayName))
+               ?? selected;
+    }
+
+    private static bool IsSteamRuntimeProton(string nameOrPath) =>
+        nameOrPath.Contains("-slr", StringComparison.OrdinalIgnoreCase) ||
+        nameOrPath.Contains("_slr", StringComparison.OrdinalIgnoreCase) ||
+        nameOrPath.Contains("SteamLinuxRuntime", StringComparison.OrdinalIgnoreCase);
+
+    private static ProtonInstall? FindInstalledGeProton()
+    {
+        return DiscoverProtonInstalls()
+            .FirstOrDefault(p =>
+                p.DisplayName.StartsWith("GE-Proton", StringComparison.OrdinalIgnoreCase) ||
+                p.DisplayName.StartsWith("Proton-GE", StringComparison.OrdinalIgnoreCase));
     }
 
     private static void ApplyProtonEnvironment(ProcessStartInfo startInfo, string protonInstallPath, string prefix)
@@ -265,15 +341,61 @@ public static class LinuxClientRuntime
         startInfo.Environment["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = steamRoot;
 
         var logPath = Path.Combine(prefix, "skyfire-launch.log");
-        startInfo.Environment["WINEDEBUG"] = startInfo.Environment.TryGetValue("WINEDEBUG", out var existing) &&
-                                             !string.IsNullOrWhiteSpace(existing)
-            ? existing
-            : "+err,+module";
+        // Never enable +module here: redirected stderr pipes fill and stall Wine,
+        // which looks like "Launched" while the game is frozen/dead.
+        if (!startInfo.Environment.TryGetValue("WINEDEBUG", out var existing) ||
+            string.IsNullOrWhiteSpace(existing))
+        {
+            startInfo.Environment["WINEDEBUG"] =
+                Environment.GetEnvironmentVariable("SKYFIRE_WINEDEBUG") ?? "-all";
+        }
+
         startInfo.RedirectStandardOutput = true;
         startInfo.RedirectStandardError = true;
         startInfo.CreateNoWindow = true;
-        // Consumers must call AttachLaunchLog after Process.Start.
         startInfo.Environment["SKYFIRE_LAUNCH_LOG"] = logPath;
+
+        TryAddSteamCompatMounts(startInfo, Environment.GetEnvironmentVariable("STEAM_COMPAT_INSTALL_PATH"));
+    }
+
+    private static void TryAddSteamCompatMounts(ProcessStartInfo startInfo, string? installPath)
+    {
+        try
+        {
+            var mounts = new HashSet<string>(StringComparer.Ordinal);
+            if (startInfo.Environment.TryGetValue("STEAM_COMPAT_MOUNTS", out var existing) &&
+                !string.IsNullOrWhiteSpace(existing))
+            {
+                foreach (var part in existing.Split(':', StringSplitOptions.RemoveEmptyEntries))
+                    mounts.Add(part);
+            }
+
+            if (!string.IsNullOrWhiteSpace(installPath))
+            {
+                var full = Path.GetFullPath(installPath);
+                mounts.Add(full);
+                var parent = Path.GetDirectoryName(full.TrimEnd(Path.DirectorySeparatorChar, '/'));
+                if (!string.IsNullOrWhiteSpace(parent))
+                    mounts.Add(parent);
+            }
+
+            // WorkingDirectory is the client folder for our launches.
+            if (!string.IsNullOrWhiteSpace(startInfo.WorkingDirectory))
+            {
+                var client = Path.GetFullPath(startInfo.WorkingDirectory);
+                mounts.Add(client);
+                var parent = Path.GetDirectoryName(client.TrimEnd(Path.DirectorySeparatorChar, '/'));
+                if (!string.IsNullOrWhiteSpace(parent))
+                    mounts.Add(parent);
+            }
+
+            if (mounts.Count > 0)
+                startInfo.Environment["STEAM_COMPAT_MOUNTS"] = string.Join(':', mounts);
+        }
+        catch
+        {
+            // Optional.
+        }
     }
 
     public static void AttachLaunchLog(Process hostProcess, ProcessStartInfo startInfo)
@@ -716,6 +838,9 @@ public static class LinuxClientRuntime
     private static int Rank(ProtonInstall install)
     {
         var name = install.DisplayName;
+        // SLR builds run inside pressure-vessel and cannot be ptraced from the host.
+        if (IsSteamRuntimeProton(name) || IsSteamRuntimeProton(install.InstallPath))
+            return 20;
         // wine-cachyos / experimental Wine builds often ship nested DXVK paths and
         // create bare prefixes when used outside Steam; prefer Valve/GE first.
         if (name.Contains("cachyos", StringComparison.OrdinalIgnoreCase) ||
