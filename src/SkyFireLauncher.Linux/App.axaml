@@ -17,8 +17,8 @@
         <SolidColorBrush x:Key="BorderBrushKey" Color="#2A3548"/>
         <SolidColorBrush x:Key="InputBgBrush" Color="#0C121E"/>
 
-        <FontFamily x:Key="DisplayFont">avares://SkyFireLauncher/Fonts/Cinzel-Regular.ttf#Cinzel</FontFamily>
-        <FontFamily x:Key="BodyFont">avares://SkyFireLauncher/Fonts/SourceSans3-Regular.otf#Source Sans 3</FontFamily>
+        <FontFamily x:Key="DisplayFont">avares://SkyFireLauncher/Fonts#Cinzel, Inter, sans-serif</FontFamily>
+        <FontFamily x:Key="BodyFont">avares://SkyFireLauncher/Fonts#Source Sans 3, Inter, sans-serif</FontFamily>
 
         <LinearGradientBrush x:Key="AtmosphereBrush" StartPoint="0,0" EndPoint="1,1">
             <GradientStop Color="#1A0A08" Offset="0"/>
@@ -59,6 +59,14 @@
     <Application.Styles>
         <FluentTheme />
 
+        <Style Selector="Window">
+            <Setter Property="FontFamily" Value="{StaticResource BodyFont}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        </Style>
+        <Style Selector="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource BodyFont}"/>
+        </Style>
+
         <Style Selector="Button.chrome-icon">
             <Setter Property="Width" Value="36"/>
             <Setter Property="Height" Value="28"/>
@@ -71,7 +79,10 @@
             <Setter Property="Template">
                 <ControlTemplate>
                     <Border Name="Bd" Background="{TemplateBinding Background}" CornerRadius="3">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
                     </Border>
                 </ControlTemplate>
             </Setter>
@@ -98,7 +109,10 @@
             <Setter Property="Template">
                 <ControlTemplate>
                     <Border Name="Bd" Background="{TemplateBinding Background}" CornerRadius="3">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
                     </Border>
                 </ControlTemplate>
             </Setter>
@@ -135,7 +149,10 @@
                             BorderThickness="1"
                             CornerRadius="3"
                             Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
                     </Border>
                 </ControlTemplate>
             </Setter>
@@ -171,7 +188,10 @@
                                 BorderThickness="1.5"
                                 CornerRadius="4"
                                 Padding="28,0">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
                         </Border>
                     </Grid>
                 </ControlTemplate>
@@ -269,7 +289,10 @@
                             CornerRadius="3"
                             Padding="14,8"
                             MinWidth="88">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
                     </Border>
                 </ControlTemplate>
             </Setter>
@@ -308,7 +331,10 @@
                                   StrokeJoin="Round"
                                   IsVisible="False"/>
                         </Border>
-                        <ContentPresenter VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          VerticalAlignment="Center"
+                                          Margin="8,0,0,0"/>
                     </StackPanel>
                 </ControlTemplate>
             </Setter>
