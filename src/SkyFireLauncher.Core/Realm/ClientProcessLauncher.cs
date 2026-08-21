@@ -5,10 +5,14 @@ using SkyFireLauncher.Configuration;
 
 namespace SkyFireLauncher.Realm;
 
-// Launches the client, then immediately patches its hardcoded region logon
-// hostnames directly in process memory. Nothing on disk (the exe, the hosts
-// file) is ever touched - the patch only exists in the running process, for
-// its lifetime.
+// Windows: launches the client and patches logon hostnames in live process memory
+// (original on-disk exe untouched).
+//
+// Linux: Proton's Steam runtime / ptrace isolation makes live memory patches kill
+// the client or deny /proc maps. Instead we copy the exe into the Proton prefix,
+// apply the same hostname + login-flow patches to that copy only, and launch it
+// with a normal `proton run` (Steam runtime on) so the game can open a window.
+// The user's game-directory client stays unmodified.
 public static class ClientProcessLauncher
 {
     /// <summary>Status text while Linux launch/patch is in progress (UI poll).</summary>
@@ -73,86 +77,45 @@ public static class ClientProcessLauncher
         bool enableAuthnetLogin,
         LinuxLaunchOptions linuxOptions)
     {
-        var is64BitClient = PeImportTable.IsPe64Bit(File.ReadAllBytes(exePath));
+        LaunchWaitStatus = "preparing patched client copy";
+        var patchedExe = LinuxClientRuntime.PreparePatchedClientCopy(exePath, linuxOptions.ProtonPrefixPath);
+        ClientImagePatcher.ApplyToFile(patchedExe, targetAddress, enableAuthnetLogin);
+
+        var is64BitClient = PeImportTable.IsPe64Bit(File.ReadAllBytes(patchedExe));
         var startInfo = LinuxClientRuntime.BuildStartInfo(
             linuxOptions.Layer,
-            exePath,
+            patchedExe,
             workingDirectory,
             is64BitClient,
             linuxOptions.ProtonInstallPath,
             linuxOptions.ProtonPrefixPath);
 
-        try
-        {
-            return StartAndPatch(startInfo, exePath, targetAddress, enableAuthnetLogin, LinuxClientRuntime.ReadyTimeout(linuxOptions.Layer));
-        }
-        catch (Exception ex) when (linuxOptions.Layer == LinuxCompatibilityLayer.Proton && IsAttachFailure(ex))
-        {
-            var proton = LinuxClientRuntime.ResolveProtonInstall(linuxOptions.ProtonInstallPath);
-            if (proton is null)
-                throw;
-
-            var fallback = LinuxClientRuntime.BuildProtonWineFallbackStartInfo(
-                proton.InstallPath,
-                exePath,
-                workingDirectory,
-                linuxOptions.ProtonPrefixPath,
-                is64BitClient);
-
-            return StartAndPatch(fallback, exePath, targetAddress, enableAuthnetLogin, LinuxClientRuntime.ReadyTimeout(linuxOptions.Layer));
-        }
+        return StartPatchedLinuxClient(startInfo, patchedExe, LinuxClientRuntime.ReadyTimeout(linuxOptions.Layer));
     }
 
-    private static int StartAndPatch(
-        ProcessStartInfo startInfo,
-        string exePath,
-        string targetAddress,
-        bool enableAuthnetLogin,
-        TimeSpan timeout)
+    private static int StartPatchedLinuxClient(ProcessStartInfo startInfo, string exePath, TimeSpan timeout)
     {
+        LaunchWaitStatus = "starting Proton";
         var hostProcess = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Failed to start {Path.GetFileName(startInfo.FileName)}.");
 
-        if (OperatingSystem.IsLinux())
-            LinuxClientRuntime.AttachLaunchLog(hostProcess, startInfo);
+        LinuxClientRuntime.AttachLaunchLog(hostProcess, startInfo);
 
         int? clientPid = null;
         try
         {
-            // Find Wow (PE mapped; prefer ws2_32 ready), patch, detach. Do not wait
-            // for d3d9 — that blocked forever when graphics had not started yet.
+            // No ptrace — just wait until Wow shows up and stays alive.
             clientPid = LinuxRemoteProcess.WaitForReadyClient(exePath, hostProcess.Id, timeout);
+            LaunchWaitStatus = $"running pid {clientPid.Value}";
 
-            LaunchWaitStatus = $"attaching pid {clientPid.Value}";
-            using (var process = new LinuxRemoteProcess(clientPid.Value))
-            {
-                if (!IsPidAlive(clientPid.Value))
-                    throw new InvalidOperationException("The client exited while attaching (ptrace). Try PLAY again.");
-
-                LaunchWaitStatus = $"patching pid {clientPid.Value}";
-                var fileBuffer = File.ReadAllBytes(exePath);
-                var (baseAddress, moduleSize) = LinuxRemoteProcess.FindPeModule(clientPid.Value, exePath, fileBuffer);
-                ClientImagePatcher.Apply(process, baseAddress, moduleSize, exePath, targetAddress, enableAuthnetLogin);
-            }
-
-            LaunchWaitStatus = $"patched pid {clientPid.Value}, checking alive";
-
-            if (!WaitForClientStillAlive(clientPid.Value, TimeSpan.FromSeconds(3)))
+            if (!WaitForClientStillAlive(clientPid.Value, TimeSpan.FromSeconds(5)))
             {
                 var logHint = startInfo.Environment.TryGetValue("SKYFIRE_LAUNCH_LOG", out var log) &&
                               !string.IsNullOrWhiteSpace(log)
                     ? $" See {log}."
                     : string.Empty;
                 throw new InvalidOperationException(
-                    "The client crashed during/after in-memory patching. " +
-                    "Kill leftover wine/Wow processes and try again." +
-                    logHint);
-            }
-
-            if (!LinuxRemoteProcess.IsClientProcess(clientPid.Value, exePath))
-            {
-                throw new InvalidOperationException(
-                    "Attached process no longer looks like the WoW client. Try PLAY again.");
+                    "The client exited shortly after launch." + logHint);
             }
 
             LaunchWaitStatus = string.Empty;
@@ -203,24 +166,5 @@ public static class ClientProcessLauncher
         {
             return false;
         }
-    }
-
-    private static bool IsAttachFailure(Exception ex)
-    {
-        for (var current = ex; current is not null; current = current.InnerException)
-        {
-            if (current is IOException)
-                return true;
-
-            var message = current.Message;
-            if (message.Contains("ptrace", StringComparison.OrdinalIgnoreCase)
-                || message.Contains("Timed out waiting", StringComparison.OrdinalIgnoreCase)
-                || message.Contains("/proc/", StringComparison.OrdinalIgnoreCase)
-                || message.Contains("input/output error", StringComparison.OrdinalIgnoreCase)
-                || message.Contains("mprotect", StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-
-        return false;
     }
 }

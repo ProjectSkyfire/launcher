@@ -186,80 +186,39 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
     }
 
     /// <summary>
-    /// Finds the live Wow process by /proc comm, cmdline, or mapped PE. Prefer
-    /// ws2_32 present (DNS hook), but do not wait on d3d9 — headless clients
-    /// never load it and that hung the launcher forever.
+    /// Finds the live Wow process by /proc comm or cmdline (maps optional — Steam
+    /// runtime may deny them). Used after launching a pre-patched copy; no attach.
     /// </summary>
     public static int WaitForReadyClient(string exePath, int rootPid, TimeSpan timeout)
     {
         var fileName = Path.GetFileName(exePath);
         var deadline = DateTime.UtcNow + timeout;
-        var sawClient = false;
-        var firstSeen = DateTime.MaxValue;
         var lastNote = DateTime.UtcNow;
 
         WaitStatus = $"waiting for {fileName}";
 
         while (DateTime.UtcNow < deadline)
         {
-            int? anyClient = null;
-            int? withWinsock = null;
-
             foreach (var pid in EnumerateCandidateClientPids(rootPid))
             {
                 if (!IsClientProcess(pid, exePath))
                     continue;
 
-                if (!sawClient)
-                    firstSeen = DateTime.UtcNow;
-                sawClient = true;
-                anyClient ??= pid;
-
-                if (MapsContainDll(pid, "ws2_32.dll"))
-                {
-                    withWinsock = pid;
-                    break;
-                }
-            }
-
-            if (withWinsock is int ready)
-            {
-                WaitStatus = $"patching pid {ready}";
-                return ready;
-            }
-
-            // Process is clearly Wow (comm/cmdline) — wait longer so wine finishes
-            // early init; attaching during loader often kills the process.
-            if (anyClient is int earlyPid &&
-                DateTime.UtcNow - firstSeen > TimeSpan.FromSeconds(12))
-            {
-                WaitStatus = $"patching pid {earlyPid}";
-                return earlyPid;
+                WaitStatus = $"running pid {pid}";
+                return pid;
             }
 
             if (DateTime.UtcNow - lastNote > TimeSpan.FromSeconds(2))
             {
                 lastNote = DateTime.UtcNow;
-                WaitStatus = sawClient
-                    ? $"found {fileName}, waiting briefly for ws2_32"
-                    : $"waiting for {fileName} (comm/cmdline/maps)";
+                WaitStatus = $"waiting for {fileName}";
             }
 
-            Thread.Sleep(50);
-        }
-
-        foreach (var pid in EnumerateCandidateClientPids(rootPid))
-        {
-            if (!IsClientProcess(pid, exePath))
-                continue;
-
-            WaitStatus = $"patching pid {pid} (timeout fallback)";
-            return pid;
+            Thread.Sleep(100);
         }
 
         throw new InvalidOperationException(
-            $"Timed out waiting for {fileName}. If it is in the process list with no window, " +
-            "graphics failed to start — check skyfire-launch.log and use GE-Proton (not *-slr).");
+            $"Timed out waiting for {fileName}. Check skyfire-launch.log and that Proton can open a display.");
     }
 
     public static bool IsClientProcess(int pid, string exePath)

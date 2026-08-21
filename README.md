@@ -76,11 +76,12 @@ launching `Wow.exe` / `Wow-64.exe` through [Proton](https://github.com/ValveSoft
    are detected from Steam and `compatibilitytools.d`. Leave **Proton Prefix**
    empty to use `~/.local/share/SkyFireLauncher/proton`.
 
-The Linux launcher needs permission to attach to the Wine/Proton process
-(`ptrace`) so it can apply the same in-memory patches as on Windows. That
-works when the launcher is the same user that owns the game process and
-`kernel.yama.ptrace_scope` is `0` or `1` (the default on most distros).
-Config is stored at `~/.config/SkyFireLauncher/config.json`.
+The Linux launcher copies `Wow.exe` / `Wow-64.exe` into the Proton prefix,
+applies hostname + login-flow patches to **that copy only** (your game folder
+stays unmodified), then starts it with a normal `proton run` — including
+`*-slr` builds — so graphics work like a manual launch script. Windows still
+uses live in-memory patches. Config is stored at
+`~/.config/SkyFireLauncher/config.json`.
 
 #### Arch Linux
 
@@ -141,17 +142,10 @@ and the launcher pointed at `Wow.exe` / `Wow-64.exe`.
 
 If **PLAY** fails:
 
-- Prefer **GE-Proton** or Steam **Proton 9/Experimental** (or
-  `proton-cachyos-native`). Avoid `*-slr` / Steam Linux Runtime builds — they
-  run in a container and block the launcher's in-memory patches (`ptrace`).
-  A manual `proton-cachyos-slr` script that starts a **pre-patched** exe can
-  work fine; the launcher must patch a live unpatched client for authnet, so
-  it cannot use that SLR path. GE is started with `PROTON_NO_STEAM_RUNTIME=1`
-  so `/proc/pid/maps` stays readable; host Vulkan ICDs are passed through for DXVK.
-- Empty Proton list — install Steam Proton (or GE) and reopen Configuration
-- `ptrace` / “could not attach” — do not use `*-slr` Proton; same user as the
-  game; `kernel.yama.ptrace_scope` is `0` or `1`
-  (`cat /proc/sys/kernel/yama/ptrace_scope`)
+- Prefer **proton-cachyos-slr** or **GE-Proton** (same family as a working
+  manual `proton run`). The Linux launcher patches a copy under
+  `~/.local/share/SkyFireLauncher/proton/skyfire-patched/`, not your game dir.
+- Empty Proton list — install Steam Proton (or GE / cachyos) and reopen Configuration
 - Black screen / no Vulkan — missing GPU ICD, or 32-bit Wow without lib32
   Vulkan
 - `tracked_files` / Proton traceback on launch — a Wine-only prefix was reused
@@ -164,7 +158,7 @@ If **PLAY** fails:
   sudo pacman -S dxvk-mingw-git
   rm -rf ~/.local/share/SkyFireLauncher/proton
   ```
-  Or install **GE-Proton** / Steam Proton 9+ and select it in Configuration.
+  Or install **GE-Proton** / Steam Proton 9+ / **proton-cachyos-slr** and select it.
   With `umu-launcher` installed, the launcher can auto-download GE-Proton when
   the selected Proton has no DXVK. Details:
   `~/.local/share/SkyFireLauncher/proton/skyfire-launch.log`

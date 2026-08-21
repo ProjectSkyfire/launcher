@@ -24,6 +24,20 @@ public static class LinuxClientRuntime
         }
     }
 
+    /// <summary>
+    /// Copies the game exe into the Proton prefix so we can patch that copy without
+    /// modifying the user's client directory.
+    /// </summary>
+    public static string PreparePatchedClientCopy(string exePath, string? protonPrefixPath)
+    {
+        var prefix = ResolvePrefix(protonPrefixPath);
+        var dir = Path.Combine(prefix, "skyfire-patched");
+        Directory.CreateDirectory(dir);
+        var dest = Path.Combine(dir, Path.GetFileName(exePath));
+        File.Copy(exePath, dest, overwrite: true);
+        return dest;
+    }
+
     public static IReadOnlyList<ProtonInstall> DiscoverProtonInstalls()
     {
         var found = new Dictionary<string, ProtonInstall>(StringComparer.Ordinal);
@@ -193,26 +207,11 @@ public static class LinuxClientRuntime
         var prefix = ResolvePrefix(protonPrefixPath);
         Directory.CreateDirectory(prefix);
 
-        var selected = PreferAttachableProton(proton);
+        // Linux launches a pre-patched copy — no host ptrace — so Steam runtime /
+        // *-slr is fine and is what actually gives Wow a window (see launch-wow.sh).
+        var selected = proton;
         StopPrefixWineServer(prefix, selected.InstallPath);
         RepairProtonCompatData(prefix);
-
-        // *-slr / pressure-vessel blocks ptrace and /proc/pid/maps. Prefer GE
-        // with PROTON_NO_STEAM_RUNTIME so the host can attach for authnet patches.
-        if (IsSteamRuntimeProton(selected.DisplayName) ||
-            IsSteamRuntimeProton(selected.InstallPath))
-        {
-            selected = FindInstalledGeProton()
-                       ?? DiscoverProtonInstalls().FirstOrDefault(p =>
-                           !IsSteamRuntimeProton(p.DisplayName) &&
-                           !IsSteamRuntimeProton(p.InstallPath))
-                       ?? throw new InvalidOperationException(
-                           "This Proton build uses Steam Linux Runtime (*-slr), which blocks " +
-                           "in-memory patches. Install GE-Proton (ProtonUp-Qt or umu) and select it.");
-            StopPrefixWineServer(prefix, selected.InstallPath);
-            RepairProtonCompatData(prefix);
-        }
-
         TryEnsureProtonGraphicsStack(selected.InstallPath, prefix);
         return BuildProtonScriptStartInfo(selected, exePath, workingDirectory, prefix);
     }
@@ -232,18 +231,11 @@ public static class LinuxClientRuntime
         startInfo.ArgumentList.Add("run");
         AddClientArguments(startInfo, exePath);
         ApplyProtonEnvironment(startInfo, proton.InstallPath, prefix, workingDirectory);
-        // Host namespace required for /proc/pid/maps + ptrace (authnet live patches).
-        // GE 11's Steam runtime/pressure-vessel makes maps return EACCES from the host.
-        startInfo.Environment["PROTON_NO_STEAM_RUNTIME"] = "1";
-        startInfo.Environment["STEAM_RUNTIME"] = "0";
-        startInfo.Environment["UMU_NO_RUNTIME"] = "1";
+        // Keep Steam runtime (needed for GUI). Do not set PROTON_NO_STEAM_RUNTIME.
         startInfo.Environment["PROTONFIXES_DISABLE"] = "1";
         startInfo.Environment["PROTON_FSR4_UPGRADE"] = "0";
         startInfo.Environment["PROTON_FSR4_RDNA3_UPGRADE"] = "0";
         startInfo.Environment["PROTON_DLSS_UPGRADE"] = "0";
-        // Help DXVK find the host Vulkan driver without the Steam runtime container.
-        EnsureHostVulkanIcd(startInfo);
-        ApplyProtonHostLibraryPath(startInfo, proton.InstallPath);
         return startInfo;
     }
 
@@ -940,24 +932,28 @@ public static class LinuxClientRuntime
     private static int Rank(ProtonInstall install)
     {
         var name = install.DisplayName;
-        // SLR builds run inside pressure-vessel and cannot be ptraced from the host.
+        // Linux uses a pre-patched copy (no ptrace), so SLR is preferred for GUI —
+        // same as a working manual launch-wow.sh.
         if (IsSteamRuntimeProton(name) || IsSteamRuntimeProton(install.InstallPath))
-            return 20;
-        // wine-cachyos / experimental Wine builds often ship nested DXVK paths and
-        // create bare prefixes when used outside Steam; prefer Valve/GE first.
-        if (name.Contains("cachyos", StringComparison.OrdinalIgnoreCase) ||
-            name.StartsWith("wine-", StringComparison.OrdinalIgnoreCase))
-            return 8;
+        {
+            if (name.Contains("cachyos", StringComparison.OrdinalIgnoreCase))
+                return 0;
+            return 1;
+        }
+
         if (name.StartsWith("GE-Proton", StringComparison.OrdinalIgnoreCase) ||
             name.StartsWith("Proton-GE", StringComparison.OrdinalIgnoreCase))
-            return 0;
-        if (name.Contains("Experimental", StringComparison.OrdinalIgnoreCase))
-            return 1;
-        if (name.Contains("Hotfix", StringComparison.OrdinalIgnoreCase))
             return 2;
-        if (name.StartsWith("Proton", StringComparison.OrdinalIgnoreCase))
+        if (name.Contains("cachyos", StringComparison.OrdinalIgnoreCase) ||
+            name.StartsWith("wine-", StringComparison.OrdinalIgnoreCase))
             return 3;
-        return 5;
+        if (name.Contains("Experimental", StringComparison.OrdinalIgnoreCase))
+            return 4;
+        if (name.Contains("Hotfix", StringComparison.OrdinalIgnoreCase))
+            return 5;
+        if (name.StartsWith("Proton", StringComparison.OrdinalIgnoreCase))
+            return 6;
+        return 10;
     }
 
     internal static string? FindOnPath(string name)

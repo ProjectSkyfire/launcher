@@ -192,6 +192,18 @@ public static class PeImportTable
         return rva;
     }
 
+    public static bool TryRvaToFileOffset(byte[] peFile, int rva, out int fileOffset)
+    {
+        var e_lfanew = ReadInt32(peFile, 0x3C);
+        var fileHeaderStart = e_lfanew + 4;
+        var numberOfSections = ReadUInt16(peFile, fileHeaderStart + 2);
+        var sizeOfOptionalHeader = ReadUInt16(peFile, fileHeaderStart + 16);
+        var sectionTableStart = e_lfanew + 24 + sizeOfOptionalHeader;
+        var sections = ReadSectionTable(peFile, sectionTableStart, numberOfSections);
+        fileOffset = RvaToFileOffset(sections, rva);
+        return fileOffset >= 0 && fileOffset < peFile.Length;
+    }
+
     private static string ReadAsciiString(byte[] module, int offset)
     {
         var end = offset;

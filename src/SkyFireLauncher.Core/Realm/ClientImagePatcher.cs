@@ -71,6 +71,66 @@ internal static class ClientImagePatcher
         }
     }
 
+    /// <summary>
+    /// Applies hostname + login-flow patches to a PE file on disk (used on Linux
+    /// so Proton can run with a full Steam runtime / GUI without host ptrace).
+    /// </summary>
+    public static void ApplyToFile(string exePath, string targetAddress, bool enableAuthnetLogin)
+    {
+        var fileBuffer = File.ReadAllBytes(exePath);
+        var searchBuffer = PeImportTable.BuildVirtualImage(fileBuffer);
+        var dirty = false;
+
+        foreach (var (patternText, replacementFormat) in PatchTargets)
+        {
+            var pattern = Encoding.ASCII.GetBytes(patternText + '\0');
+            var replacement = Encoding.ASCII.GetBytes(string.Format(replacementFormat, targetAddress) + '\0');
+            if (replacement.Length > pattern.Length)
+                throw new InvalidOperationException($"Replacement for '{patternText}' is longer than the original string.");
+
+            if (replacement.Length < pattern.Length)
+            {
+                var padded = new byte[pattern.Length];
+                Array.Copy(replacement, padded, replacement.Length);
+                replacement = padded;
+            }
+
+            var rva = 0;
+            while ((rva = IndexOf(searchBuffer, pattern, rva)) >= 0)
+            {
+                if (!PeImportTable.TryRvaToFileOffset(fileBuffer, rva, out var fileOffset))
+                {
+                    rva += pattern.Length;
+                    continue;
+                }
+
+                Array.Copy(replacement, 0, fileBuffer, fileOffset, replacement.Length);
+                dirty = true;
+                rva += pattern.Length;
+            }
+        }
+
+        var is64Bit = PeImportTable.IsPe64Bit(fileBuffer);
+        var loginFlowPatches = is64Bit ? LoginFlowPatches.X64 : LoginFlowPatches.X86;
+        if (enableAuthnetLogin)
+            loginFlowPatches = loginFlowPatches.Where(p => p.Name != "Email").ToArray();
+
+        foreach (var (_, pattern, replacement) in loginFlowPatches)
+        {
+            var rva = IndexOfWildcard(searchBuffer, pattern, 0);
+            if (rva < 0)
+                continue;
+            if (!PeImportTable.TryRvaToFileOffset(fileBuffer, rva, out var fileOffset))
+                continue;
+
+            Array.Copy(replacement, 0, fileBuffer, fileOffset, replacement.Length);
+            dirty = true;
+        }
+
+        if (dirty)
+            File.WriteAllBytes(exePath, fileBuffer);
+    }
+
     private static int IndexOf(byte[] haystack, byte[] needle, int startIndex)
     {
         for (var i = startIndex; i <= haystack.Length - needle.Length; i++)
