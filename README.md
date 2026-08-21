@@ -145,6 +145,9 @@ If **PLAY** fails:
   (`cat /proc/sys/kernel/yama/ptrace_scope`)
 - Black screen / no Vulkan — missing GPU ICD, or 32-bit Wow without lib32
   Vulkan
+- `d3d9.dll` / `libvkd3d` not found — the Proton prefix was created without
+  DXVK. Delete it and launch again:
+  `rm -rf ~/.local/share/SkyFireLauncher/proton`
 - Client starts but logs into retail/Battle.net — the in-memory patch did
   not land; check the status line under PLAY
 

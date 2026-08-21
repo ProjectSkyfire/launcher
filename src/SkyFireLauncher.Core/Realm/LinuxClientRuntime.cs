@@ -154,8 +154,8 @@ public static class LinuxClientRuntime
             startInfo.FileName = umu;
             startInfo.ArgumentList.Add(exePath);
             startInfo.Environment["PROTONPATH"] = proton.InstallPath;
-            startInfo.Environment["GAMEID"] = "umu-skyfire";
-            startInfo.Environment["UMU_NO_RUNTIME"] = "1";
+            // Generic non-Steam ID so umu still installs DXVK/vkd3d into the prefix.
+            startInfo.Environment["GAMEID"] = "0";
         }
         else
         {
@@ -172,11 +172,8 @@ public static class LinuxClientRuntime
     {
         startInfo.Environment["STEAM_COMPAT_DATA_PATH"] = prefix;
         startInfo.Environment["PROTONPATH"] = protonInstallPath;
-
-        // Keep the Wine process in our namespace so in-memory patches can attach.
-        startInfo.Environment["PROTON_NO_STEAM_RUNTIME"] = "1";
-        startInfo.Environment["STEAM_RUNTIME"] = "0";
-        startInfo.Environment["UMU_NO_RUNTIME"] = "1";
+        // Wow 5.4.8 is D3D9; force DXVK instead of wined3d/vkd3d.
+        startInfo.Environment["PROTON_USE_WINED3D"] = "0";
 
         var steamRoot = FindSteamRoot();
         if (steamRoot is not null)
