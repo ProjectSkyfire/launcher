@@ -104,7 +104,11 @@ public static class LinuxClientRuntime
 
         var prefix = ResolvePrefix(protonPrefixPath);
         Directory.CreateDirectory(prefix);
-        EnsureProtonGraphicsStack(protonInstallPath, prefix);
+        if (!TryEnsureProtonGraphicsStack(protonInstallPath, prefix))
+        {
+            throw new InvalidOperationException(
+                BuildMissingDxvkMessage(protonInstallPath, umuAvailable: false));
+        }
 
         var startInfo = new ProcessStartInfo
         {
@@ -119,11 +123,11 @@ public static class LinuxClientRuntime
     }
 
     /// <summary>
-    /// Copies DXVK (and libvkd3d fallbacks) into the Proton prefix. Newer Proton
-    /// builds keep DLLs under wine/dxvk/x86_64-windows/; if prefix setup skips
-    /// that step, Wine's d3d9.dll loads instead and dies on missing libvkd3d.
+    /// Copies DXVK (and libvkd3d fallbacks) into the Proton prefix from the Proton
+    /// tree or from a system DXVK package (Arch/CachyOS dxvk-mingw-git).
     /// </summary>
-    public static void EnsureProtonGraphicsStack(string protonInstallPath, string compatDataPath)
+    /// <returns>True if at least 64-bit d3d9.dll was installed into the prefix.</returns>
+    public static bool TryEnsureProtonGraphicsStack(string? protonInstallPath, string compatDataPath)
     {
         var pfx = Path.Combine(compatDataPath, "pfx");
         var system32 = Path.Combine(pfx, "drive_c", "windows", "system32");
@@ -132,12 +136,16 @@ public static class LinuxClientRuntime
         Directory.CreateDirectory(syswow64);
 
         string[] dxvkNames = ["d3d9.dll", "d3d11.dll", "d3d10core.dll", "dxgi.dll"];
-        var copiedDxvk = 0;
+        var installedD3d9 = false;
         foreach (var name in dxvkNames)
         {
-            if (TryInstallProtonDll(protonInstallPath, name, system32, sixtyFourBit: true))
-                copiedDxvk++;
-            TryInstallProtonDll(protonInstallPath, name, syswow64, sixtyFourBit: false);
+            if (TryInstallDxvkDll(protonInstallPath, name, system32, sixtyFourBit: true))
+            {
+                if (name.Equals("d3d9.dll", StringComparison.OrdinalIgnoreCase))
+                    installedD3d9 = true;
+            }
+
+            TryInstallDxvkDll(protonInstallPath, name, syswow64, sixtyFourBit: false);
         }
 
         foreach (var name in new[]
@@ -147,20 +155,29 @@ public static class LinuxClientRuntime
                      "libvkd3d-utils-1.dll",
                  })
         {
-            TryInstallProtonDll(protonInstallPath, name, system32, sixtyFourBit: true);
-            TryInstallProtonDll(protonInstallPath, name, syswow64, sixtyFourBit: false);
+            TryInstallDxvkDll(protonInstallPath, name, system32, sixtyFourBit: true);
+            TryInstallDxvkDll(protonInstallPath, name, syswow64, sixtyFourBit: false);
         }
 
-        if (copiedDxvk == 0)
-        {
-            throw new InvalidOperationException(
-                $"Proton at '{protonInstallPath}' has no DXVK d3d9.dll. Pick GE-Proton or Steam Proton 9+, " +
-                "or delete the prefix after installing one: rm -rf ~/.local/share/SkyFireLauncher/proton");
-        }
+        return installedD3d9;
+    }
+
+    private static string BuildMissingDxvkMessage(string? protonInstallPath, bool umuAvailable)
+    {
+        var path = string.IsNullOrWhiteSpace(protonInstallPath) ? "(none)" : protonInstallPath;
+        return
+            $"No DXVK d3d9.dll found for Proton at '{path}'. " +
+            "On Arch/CachyOS install system DXVK (`sudo pacman -S dxvk-mingw-git`), " +
+            "or install GE-Proton / Steam Proton 9+ and select it in Configuration" +
+            (umuAvailable
+                ? " (umu can also auto-download GE-Proton on the next launch)."
+                : ".") +
+            " Then: rm -rf ~/.local/share/SkyFireLauncher/proton";
     }
 
     public static TimeSpan ReadyTimeout(LinuxCompatibilityLayer layer) =>
-        layer == LinuxCompatibilityLayer.Proton ? TimeSpan.FromSeconds(45) : TimeSpan.FromSeconds(8);
+        // First Proton/umu launch can wineboot + (with GE-Proton) download a full build.
+        layer == LinuxCompatibilityLayer.Proton ? TimeSpan.FromMinutes(3) : TimeSpan.FromSeconds(8);
 
     private static ProcessStartInfo BuildWineStartInfo(string exePath, string workingDirectory, bool is64BitClient)
     {
@@ -183,9 +200,23 @@ public static class LinuxClientRuntime
     {
         var prefix = ResolvePrefix(protonPrefixPath);
         Directory.CreateDirectory(prefix);
-        EnsureProtonGraphicsStack(proton.InstallPath, prefix);
 
         var umu = FindOnPath("umu-run") ?? FindOnPath("umu");
+        var hasDxvk = TryEnsureProtonGraphicsStack(proton.InstallPath, prefix);
+
+        // proton-cachyos-native (and similar) may ship no host-side DXVK. Prefer
+        // umu's GE-Proton codename so a complete Proton+DXVK tree is downloaded.
+        var protonPath = proton.InstallPath;
+        var useGeProtonDownload = false;
+        if (!hasDxvk)
+        {
+            if (umu is null)
+                throw new InvalidOperationException(BuildMissingDxvkMessage(proton.InstallPath, umuAvailable: false));
+
+            protonPath = "GE-Proton";
+            useGeProtonDownload = true;
+        }
+
         var startInfo = new ProcessStartInfo
         {
             WorkingDirectory = workingDirectory,
@@ -196,7 +227,7 @@ public static class LinuxClientRuntime
         {
             startInfo.FileName = umu;
             startInfo.ArgumentList.Add(exePath);
-            startInfo.Environment["PROTONPATH"] = proton.InstallPath;
+            startInfo.Environment["PROTONPATH"] = protonPath;
             // Generic non-Steam ID so umu still installs DXVK/vkd3d into the prefix.
             startInfo.Environment["GAMEID"] = "0";
         }
@@ -207,7 +238,10 @@ public static class LinuxClientRuntime
             startInfo.ArgumentList.Add(exePath);
         }
 
-        ApplyProtonEnvironment(startInfo, proton.InstallPath, prefix);
+        ApplyProtonEnvironment(startInfo, useGeProtonDownload ? proton.InstallPath : protonPath, prefix);
+        if (useGeProtonDownload)
+            startInfo.Environment["PROTONPATH"] = "GE-Proton";
+
         return startInfo;
     }
 
@@ -301,13 +335,13 @@ public static class LinuxClientRuntime
         return stub;
     }
 
-    private static bool TryInstallProtonDll(
-        string protonInstallPath,
+    private static bool TryInstallDxvkDll(
+        string? protonInstallPath,
         string fileName,
         string destinationDirectory,
         bool sixtyFourBit)
     {
-        var source = FindProtonDll(protonInstallPath, fileName, sixtyFourBit);
+        var source = FindDxvkDll(protonInstallPath, fileName, sixtyFourBit);
         if (source is null)
             return false;
 
@@ -323,7 +357,81 @@ public static class LinuxClientRuntime
         }
     }
 
-    private static string? FindProtonDll(string protonInstallPath, string fileName, bool sixtyFourBit)
+    private static string? FindDxvkDll(string? protonInstallPath, string fileName, bool sixtyFourBit)
+    {
+        if (!string.IsNullOrWhiteSpace(protonInstallPath))
+        {
+            var fromProton = FindDllUnderProton(protonInstallPath, fileName, sixtyFourBit);
+            if (fromProton is not null)
+                return fromProton;
+        }
+
+        return FindSystemDxvkDll(fileName, sixtyFourBit);
+    }
+
+    private static string? FindSystemDxvkDll(string fileName, bool sixtyFourBit)
+    {
+        // Arch/CachyOS dxvk-mingw-git, dxvk-bin, and similar layouts.
+        var candidates = sixtyFourBit
+            ? new[]
+            {
+                Path.Combine("/usr/lib/dxvk/win64", fileName),
+                Path.Combine("/usr/lib/dxvk/x64", fileName),
+                Path.Combine("/usr/share/dxvk/x64", fileName),
+                Path.Combine("/usr/share/dxvk/win64", fileName),
+                Path.Combine("/usr/lib64/dxvk", fileName),
+            }
+            : new[]
+            {
+                Path.Combine("/usr/lib/dxvk/win32", fileName),
+                Path.Combine("/usr/lib/dxvk/x32", fileName),
+                Path.Combine("/usr/share/dxvk/x32", fileName),
+                Path.Combine("/usr/share/dxvk/win32", fileName),
+                Path.Combine("/usr/lib32/dxvk", fileName),
+            };
+
+        foreach (var candidate in candidates)
+        {
+            if (File.Exists(candidate))
+                return candidate;
+        }
+
+        foreach (var root in new[] { "/usr/lib/dxvk", "/usr/share/dxvk", "/usr/lib64/dxvk", "/usr/lib32/dxvk" })
+        {
+            if (!Directory.Exists(root))
+                continue;
+
+            try
+            {
+                foreach (var path in Directory.EnumerateFiles(root, fileName, SearchOption.AllDirectories))
+                {
+                    var normalized = path.Replace('\\', '/');
+                    if (sixtyFourBit)
+                    {
+                        if (normalized.Contains("/win32/", StringComparison.OrdinalIgnoreCase) ||
+                            normalized.Contains("/x32/", StringComparison.OrdinalIgnoreCase) ||
+                            normalized.Contains("/i386", StringComparison.OrdinalIgnoreCase))
+                            continue;
+                        return path;
+                    }
+
+                    if (normalized.Contains("/win64/", StringComparison.OrdinalIgnoreCase) ||
+                        normalized.Contains("/x64/", StringComparison.OrdinalIgnoreCase) ||
+                        normalized.Contains("/x86_64", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    return path;
+                }
+            }
+            catch
+            {
+                // Ignore unreadable trees.
+            }
+        }
+
+        return null;
+    }
+
+    private static string? FindDllUnderProton(string protonInstallPath, string fileName, bool sixtyFourBit)
     {
         var relative = sixtyFourBit
             ? new[]

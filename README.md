@@ -136,6 +136,8 @@ and the launcher pointed at `Wow.exe` / `Wow-64.exe`.
    - Save, then **PLAY**
 
    The first Proton start can take a while while it creates the prefix.
+   If the selected Proton has no DXVK and `umu-launcher` is installed, the
+   launcher may download GE-Proton on first PLAY (can take several minutes).
 
 If **PLAY** fails:
 
@@ -147,10 +149,16 @@ If **PLAY** fails:
   (`cat /proc/sys/kernel/yama/ptrace_scope`)
 - Black screen / no Vulkan — missing GPU ICD, or 32-bit Wow without lib32
   Vulkan
-- `d3d9.dll` / `libvkd3d` / “exited immediately after launch” — DXVK never
-  landed in the prefix. Delete it, pick GE/Steam Proton, and launch again:
-  `rm -rf ~/.local/share/SkyFireLauncher/proton`
-  Details are written to
+- `d3d9.dll` / `libvkd3d` / “exited immediately” / “No DXVK d3d9.dll” —
+  your Proton build may not ship host-side DXVK (common with
+  `proton-cachyos-native`). Install system DXVK, then delete the prefix:
+  ```
+  sudo pacman -S dxvk-mingw-git
+  rm -rf ~/.local/share/SkyFireLauncher/proton
+  ```
+  Or install **GE-Proton** / Steam Proton 9+ and select it in Configuration.
+  With `umu-launcher` installed, the launcher can auto-download GE-Proton when
+  the selected Proton has no DXVK. Details:
   `~/.local/share/SkyFireLauncher/proton/skyfire-launch.log`
 - Client starts but logs into retail/Battle.net — the in-memory patch did
   not land; check the status line under PLAY
