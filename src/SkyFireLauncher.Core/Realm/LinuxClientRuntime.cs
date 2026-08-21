@@ -213,11 +213,17 @@ public static class LinuxClientRuntime
 
         if (hasDxvk)
         {
-            // Launch Proton's wine binary directly. The `proton`/`umu` wrappers
-            // enter Steam Linux Runtime (esp. *-slr builds), which blocks host
-            // ptrace and breaks in-memory patches.
-            return BuildDirectProtonWineStartInfo(
-                selected.InstallPath, exePath, workingDirectory, prefix, is64BitClient);
+            // GE/Valve `proton run` sets up DXVK/Vulkan correctly. Avoid umu/*-slr
+            // (pressure-vessel blocks ptrace). Fall back to bare wine only when
+            // the selected install is an SLR build with no better alternative.
+            if (IsSteamRuntimeProton(selected.DisplayName) ||
+                IsSteamRuntimeProton(selected.InstallPath))
+            {
+                return BuildDirectProtonWineStartInfo(
+                    selected.InstallPath, exePath, workingDirectory, prefix, is64BitClient);
+            }
+
+            return BuildProtonScriptStartInfo(selected, exePath, workingDirectory, prefix);
         }
 
         if (umu is null)
@@ -237,6 +243,28 @@ public static class LinuxClientRuntime
         startInfo.Environment["PROTON_NO_STEAM_RUNTIME"] = "1";
         ApplyProtonEnvironment(startInfo, selected.InstallPath, prefix);
         startInfo.Environment["PROTONPATH"] = "GE-Proton";
+        return startInfo;
+    }
+
+    private static ProcessStartInfo BuildProtonScriptStartInfo(
+        ProtonInstall proton,
+        string exePath,
+        string workingDirectory,
+        string prefix)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = proton.ProtonScriptPath,
+            WorkingDirectory = workingDirectory,
+            UseShellExecute = false,
+        };
+        startInfo.ArgumentList.Add("run");
+        startInfo.ArgumentList.Add(exePath);
+        ApplyProtonEnvironment(startInfo, proton.InstallPath, prefix);
+        // Stay on the host namespace so ptrace can attach (no pressure-vessel).
+        startInfo.Environment["PROTON_NO_STEAM_RUNTIME"] = "1";
+        startInfo.Environment["STEAM_RUNTIME"] = "0";
+        startInfo.Environment["UMU_NO_RUNTIME"] = "1";
         return startInfo;
     }
 

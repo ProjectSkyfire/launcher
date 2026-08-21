@@ -167,6 +167,70 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
             $"Timed out waiting for {fileName} to appear in a Wine/Proton process. Is the compatibility layer installed and able to start this client?");
     }
 
+    /// <summary>
+    /// Waits for a process that has both the client PE and d3d9.dll mapped.
+    /// Wine helpers often map the exe briefly without ever being the game.
+    /// </summary>
+    public static int WaitForReadyClient(string exePath, int rootPid, TimeSpan timeout)
+    {
+        var fileName = Path.GetFileName(exePath);
+        var deadline = DateTime.UtcNow + timeout;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            foreach (var pid in EnumerateCandidateClientPids(rootPid))
+            {
+                if (!MapsContain(pid, exePath, fileName))
+                    continue;
+                if (!MapsContainDll(pid, "d3d9.dll"))
+                    continue;
+                return pid;
+            }
+
+            if (!Directory.Exists($"/proc/{rootPid}"))
+            {
+                Thread.Sleep(200);
+                foreach (var pid in EnumeratePids())
+                {
+                    if (MapsContain(pid, exePath, fileName) && MapsContainDll(pid, "d3d9.dll"))
+                        return pid;
+                }
+
+                throw new InvalidOperationException(
+                    $"Wine/Proton exited before {fileName} finished starting (no process with d3d9.dll). Check skyfire-launch.log.");
+            }
+
+            Thread.Sleep(50);
+        }
+
+        throw new InvalidOperationException(
+            $"Timed out waiting for {fileName} with d3d9.dll. The game never reached graphics startup — check display/Vulkan and skyfire-launch.log.");
+    }
+
+    public static bool MapsContainDll(int pid, string dllFileName)
+    {
+        foreach (var map in ParseMaps(pid))
+        {
+            if (string.IsNullOrEmpty(map.Path))
+                continue;
+
+            var mapFileName = Path.GetFileName(map.Path.Replace('\\', '/'));
+            if (mapFileName.Equals(dllFileName, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static IEnumerable<int> EnumerateCandidateClientPids(int rootPid)
+    {
+        foreach (var pid in EnumerateDescendantsAndSelf(rootPid))
+            yield return pid;
+
+        foreach (var pid in EnumeratePids())
+            yield return pid;
+    }
+
     public static void WaitForMappedDll(int pid, string dllFileName, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;
@@ -175,20 +239,14 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
             if (!Directory.Exists($"/proc/{pid}"))
                 throw new InvalidOperationException("The client process exited before graphics DLLs finished loading.");
 
-            foreach (var map in ParseMaps(pid))
-            {
-                if (string.IsNullOrEmpty(map.Path))
-                    continue;
-
-                var mapFileName = Path.GetFileName(map.Path.Replace('\\', '/'));
-                if (mapFileName.Equals(dllFileName, StringComparison.OrdinalIgnoreCase))
-                    return;
-            }
+            if (MapsContainDll(pid, dllFileName))
+                return;
 
             Thread.Sleep(50);
         }
 
-        // Best-effort: some prefixes rename/override; proceed and let the alive check decide.
+        throw new InvalidOperationException(
+            $"Timed out waiting for {dllFileName} in pid {pid}. Attached process is probably not the running game.");
     }
 
     public static (nint BaseAddress, int ModuleSize) FindPeModule(int pid, string exePath, byte[] fileBuffer)

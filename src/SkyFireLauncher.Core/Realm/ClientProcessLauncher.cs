@@ -116,9 +116,10 @@ public static class ClientProcessLauncher
         int? clientPid = null;
         try
         {
-            clientPid = LinuxRemoteProcess.WaitForMappedModule(exePath, hostProcess.Id, timeout);
-            // Prefer to patch after d3d9 is mapped, but do not stall long if it never appears.
-            LinuxRemoteProcess.WaitForMappedDll(clientPid.Value, "d3d9.dll", TimeSpan.FromSeconds(15));
+            // Require the real game process: Wine often maps Wow-64.exe briefly
+            // during GetBinaryType / inspection without ever creating a window.
+            // Only a process that also has d3d9.dll loaded is the running client.
+            clientPid = LinuxRemoteProcess.WaitForReadyClient(exePath, hostProcess.Id, timeout);
 
             using (var process = new LinuxRemoteProcess(clientPid.Value))
             {
@@ -127,7 +128,6 @@ public static class ClientProcessLauncher
                 ClientImagePatcher.Apply(process, baseAddress, moduleSize, exePath, targetAddress, enableAuthnetLogin);
             }
 
-            // Confirm the client survives past patch + early init.
             if (!WaitForClientStillAlive(clientPid.Value, TimeSpan.FromSeconds(5)))
             {
                 var logHint = startInfo.Environment.TryGetValue("SKYFIRE_LAUNCH_LOG", out var log) &&
@@ -138,6 +138,12 @@ public static class ClientProcessLauncher
                     "The client exited shortly after launch. " +
                     "Delete ~/.local/share/SkyFireLauncher/proton, pick GE-Proton (not *-slr), and try again." +
                     logHint);
+            }
+
+            if (!LinuxRemoteProcess.MapsContainDll(clientPid.Value, "d3d9.dll"))
+            {
+                throw new InvalidOperationException(
+                    "Attached to a Wine helper that is not the running game (no d3d9.dll). Try PLAY again.");
             }
 
             return clientPid.Value;
