@@ -117,9 +117,8 @@ public static class ClientProcessLauncher
         try
         {
             clientPid = LinuxRemoteProcess.WaitForMappedModule(exePath, hostProcess.Id, timeout);
-            // Wait until graphics imports are in place so we do not freeze the
-            // loader mid-d3d9 init with a full-process ptrace attach.
-            LinuxRemoteProcess.WaitForMappedDll(clientPid.Value, "d3d9.dll", TimeSpan.FromSeconds(30));
+            // Prefer to patch after d3d9 is mapped, but do not stall long if it never appears.
+            LinuxRemoteProcess.WaitForMappedDll(clientPid.Value, "d3d9.dll", TimeSpan.FromSeconds(15));
 
             using (var process = new LinuxRemoteProcess(clientPid.Value))
             {
@@ -128,8 +127,8 @@ public static class ClientProcessLauncher
                 ClientImagePatcher.Apply(process, baseAddress, moduleSize, exePath, targetAddress, enableAuthnetLogin);
             }
 
-            // Wow can appear in /proc/*/maps before it is actually stable.
-            if (!WaitForClientStillAlive(clientPid.Value, TimeSpan.FromSeconds(8)))
+            // Confirm the client survives past patch + early init.
+            if (!WaitForClientStillAlive(clientPid.Value, TimeSpan.FromSeconds(5)))
             {
                 var logHint = startInfo.Environment.TryGetValue("SKYFIRE_LAUNCH_LOG", out var log) &&
                               !string.IsNullOrWhiteSpace(log)

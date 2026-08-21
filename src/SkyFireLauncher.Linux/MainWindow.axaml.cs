@@ -1,4 +1,5 @@
 using System.IO;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -222,7 +223,7 @@ public partial class MainWindow : Window
         ShowNotice("SkyFire Launcher", "Configuration saved.", SettingsPane);
     }
 
-    private void LaunchButton_Click(object? sender, RoutedEventArgs e)
+    private async void LaunchButton_Click(object? sender, RoutedEventArgs e)
     {
         var version = LaunchVersion64RadioButton.IsChecked == true ? ClientVersion.X64 : ClientVersion.X86;
         var exeName = version == ClientVersion.X64 ? "Wow-64.exe" : "Wow.exe";
@@ -240,39 +241,55 @@ public partial class MainWindow : Window
             return;
         }
 
+        LaunchButton.IsEnabled = false;
+        LaunchStatusTextBlock.Text = "Starting client (first Proton prefix can take a minute)...";
+
+        var clientLocation = _config.ClientLocation;
+        var loginAddress = _config.LoginAddress;
+        var clearCache = _config.ClearCacheOnLogin;
+        var enableAuthnet = _config.EnableAuthnetLogin;
+        var linuxOptions = new LinuxLaunchOptions
+        {
+            Layer = _config.LinuxRuntime,
+            ProtonInstallPath = _config.ProtonInstallPath,
+            ProtonPrefixPath = _config.ProtonPrefixPath
+        };
+        var runtime = _config.LinuxRuntime == LinuxCompatibilityLayer.Proton ? "Proton" : "Wine";
+
         try
         {
-            if (_config.ClearCacheOnLogin)
-                ClearClientCache(_config.ClientLocation);
-
-            RealmlistConfigWriter.SetRealmlist(_config.ClientLocation, _config.LoginAddress);
-
-            if (_config.EnableAuthnetLogin)
+            var clientPid = await Task.Run(() =>
             {
-                var loginHost = _config.LoginAddress.Split(':')[0];
-                RealmlistConfigWriter.SetRealmlistBn(_config.ClientLocation, $"{loginHost}:{AuthnetGamePort}");
-            }
+                if (clearCache)
+                    ClearClientCache(clientLocation);
 
-            var clientPid = ClientProcessLauncher.LaunchAndRedirect(
-                exePath,
-                _config.ClientLocation,
-                _config.LoginAddress,
-                _config.EnableAuthnetLogin,
-                new LinuxLaunchOptions
+                RealmlistConfigWriter.SetRealmlist(clientLocation, loginAddress);
+
+                if (enableAuthnet)
                 {
-                    Layer = _config.LinuxRuntime,
-                    ProtonInstallPath = _config.ProtonInstallPath,
-                    ProtonPrefixPath = _config.ProtonPrefixPath
-                });
+                    var loginHost = loginAddress.Split(':')[0];
+                    RealmlistConfigWriter.SetRealmlistBn(clientLocation, $"{loginHost}:{AuthnetGamePort}");
+                }
 
-            var runtime = _config.LinuxRuntime == LinuxCompatibilityLayer.Proton ? "Proton" : "Wine";
+                return ClientProcessLauncher.LaunchAndRedirect(
+                    exePath,
+                    clientLocation,
+                    loginAddress,
+                    enableAuthnet,
+                    linuxOptions);
+            }).ConfigureAwait(true);
+
             LaunchStatusTextBlock.Text = clientPid > 0
-                ? $"Launched {exeName} via {runtime} (pid {clientPid}), redirected to {_config.LoginAddress}."
-                : $"Launched {exeName} via {runtime}, redirected to {_config.LoginAddress}.";
+                ? $"Launched {exeName} via {runtime} (pid {clientPid}), redirected to {loginAddress}."
+                : $"Launched {exeName} via {runtime}, redirected to {loginAddress}.";
         }
         catch (Exception ex)
         {
             LaunchStatusTextBlock.Text = $"Failed to launch: {ex.Message}";
+        }
+        finally
+        {
+            LaunchButton.IsEnabled = true;
         }
     }
 

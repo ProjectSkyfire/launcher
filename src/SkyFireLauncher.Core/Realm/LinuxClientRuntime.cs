@@ -165,8 +165,9 @@ public static class LinuxClientRuntime
     }
 
     public static TimeSpan ReadyTimeout(LinuxCompatibilityLayer layer) =>
-        // First Proton/umu launch can wineboot + (with GE-Proton) download a full build.
-        layer == LinuxCompatibilityLayer.Proton ? TimeSpan.FromMinutes(3) : TimeSpan.FromSeconds(8);
+        // Direct wine/Proton wineboot can take a bit; keep this bounded so the
+        // UI status can fail clearly instead of hanging forever.
+        layer == LinuxCompatibilityLayer.Proton ? TimeSpan.FromSeconds(90) : TimeSpan.FromSeconds(8);
 
     private static ProcessStartInfo BuildWineStartInfo(string exePath, string workingDirectory, bool is64BitClient)
     {

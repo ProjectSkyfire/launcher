@@ -145,6 +145,21 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
                     return pid;
             }
 
+            // If the launcher process died and nothing mapped the client, fail fast.
+            if (!Directory.Exists($"/proc/{rootPid}"))
+            {
+                // Give a brief grace period for reparented wine children.
+                Thread.Sleep(200);
+                foreach (var pid in EnumeratePids())
+                {
+                    if (MapsContain(pid, exePath, fileName))
+                        return pid;
+                }
+
+                throw new InvalidOperationException(
+                    $"Wine/Proton exited before {fileName} started. Check skyfire-launch.log and that GE-Proton's wine binary can open a display.");
+            }
+
             Thread.Sleep(50);
         }
 
@@ -238,7 +253,7 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
             if (Native.ptrace(Native.PTRACE_ATTACH, tid, 0, 0) != 0)
                 continue;
 
-            if (Native.waitpid(tid, out _, 0) < 0)
+            if (!WaitForStop(tid, TimeSpan.FromSeconds(2)))
             {
                 Native.ptrace(Native.PTRACE_DETACH, tid, 0, 0);
                 continue;
@@ -254,6 +269,24 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
                 "Steam Linux Runtime / *-slr Proton builds block host ptrace — pick GE-Proton or proton-cachyos-native. " +
                 "Also check kernel.yama.ptrace_scope (0 or 1) and run the launcher as the same user that owns the Wine process.");
         }
+    }
+
+    private static bool WaitForStop(int tid, TimeSpan timeout)
+    {
+        const int wnohang = 1;
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            var result = Native.waitpid(tid, out _, wnohang);
+            if (result == tid)
+                return true;
+            if (result < 0)
+                return false;
+
+            Thread.Sleep(10);
+        }
+
+        return false;
     }
 
     private void DetachAllThreads()
