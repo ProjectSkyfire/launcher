@@ -104,7 +104,7 @@ public static class LinuxClientRuntime
 
         var prefix = ResolvePrefix(protonPrefixPath);
         Directory.CreateDirectory(prefix);
-        StopPrefixWineServer(prefix);
+        StopPrefixWineServer(prefix, protonInstallPath);
         if (!TryEnsureProtonGraphicsStack(protonInstallPath, prefix))
         {
             throw new InvalidOperationException(
@@ -201,7 +201,7 @@ public static class LinuxClientRuntime
     {
         var prefix = ResolvePrefix(protonPrefixPath);
         Directory.CreateDirectory(prefix);
-        StopPrefixWineServer(prefix);
+        StopPrefixWineServer(prefix, proton.InstallPath);
 
         var umu = FindOnPath("umu-run") ?? FindOnPath("umu");
         var hasDxvk = TryEnsureProtonGraphicsStack(proton.InstallPath, prefix);
