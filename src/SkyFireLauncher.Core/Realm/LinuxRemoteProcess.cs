@@ -7,12 +7,17 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
 {
     private const int SysMmap = 9;
     private const int SysMmap2 = 192;
+    private const int SysMprotect = 10;
+    private const int SysMprotect32 = 125;
     private const int ProtReadWriteExec = 7; // PROT_READ | PROT_WRITE | PROT_EXEC
     private const int MapPrivateAnonymous = 0x22;
     private const int Map32Bit = 0x40;
     private const int SigKill = 9;
+    private const int PageSize = 4096;
 
     private readonly List<int> _attachedTids = [];
+    private readonly bool _is64Bit;
+    private nint _syscallGadget;
     private bool _disposed;
 
     public int Id { get; }
@@ -21,6 +26,7 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
     {
         Id = pid;
         AttachAllThreads();
+        _is64Bit = IsElf64(pid);
     }
 
     public byte[] Read(nint address, int size)
@@ -48,26 +54,38 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
 
     public void Write(nint address, byte[] data)
     {
-        var offset = 0;
-        while (offset < data.Length)
+        if (data.Length == 0)
+            return;
+
+        // Hostname/login patches live in read-only PE sections. process_vm_writev
+        // and /proc/pid/mem both return EIO/EFAULT on those pages unless the
+        // mapping is made writable first. Prefer mprotect + writev, then ptrace.
+        if (TryWrite(address, data))
+            return;
+
+        try
         {
-            var chunk = Math.Min(4096, data.Length - offset);
-            var slice = data.AsSpan(offset, chunk);
-            if (!TryProcessVm(write: true, address + offset, slice))
-                WriteProcMem(address + offset, slice);
-            offset += chunk;
+            Unprotect(address, data.Length);
         }
+        catch
+        {
+            // Still try poke if mprotect is unavailable.
+        }
+
+        if (TryWrite(address, data))
+            return;
+
+        WriteViaPtrace(address, data);
     }
 
     public nint AllocateExecutable(int size, bool prefer32BitAddress)
     {
-        var length = Math.Max(4096, (size + 4095) & ~4095);
-        var processIs64Bit = IsElf64(Id);
-        var gadget = FindSyscallGadget(processIs64Bit);
+        var length = Math.Max(PageSize, (size + PageSize - 1) & ~(PageSize - 1));
+        var gadget = EnsureSyscallGadget();
         var tid = _attachedTids[0];
 
         long result;
-        if (processIs64Bit)
+        if (_is64Bit)
         {
             var flags = (ulong)MapPrivateAnonymous;
             if (prefer32BitAddress)
@@ -220,6 +238,13 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
         _attachedTids.Clear();
     }
 
+    private nint EnsureSyscallGadget()
+    {
+        if (_syscallGadget == 0)
+            _syscallGadget = FindSyscallGadget(_is64Bit);
+        return _syscallGadget;
+    }
+
     private nint FindSyscallGadget(bool processIs64Bit)
     {
         byte[] needle = processIs64Bit ? [0x0F, 0x05] : [0xCD, 0x80];
@@ -322,7 +347,7 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
         }
     }
 
-    private unsafe bool TryProcessVm(bool write, nint remoteAddress, Span<byte> buffer)
+    private unsafe bool TryProcessVm(bool write, nint remoteAddress, ReadOnlySpan<byte> buffer)
     {
         if (buffer.Length == 0)
             return true;
@@ -338,18 +363,114 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
         }
     }
 
+    private bool TryWrite(nint address, ReadOnlySpan<byte> data)
+    {
+        var offset = 0;
+        while (offset < data.Length)
+        {
+            var chunk = Math.Min(PageSize, data.Length - offset);
+            if (!TryProcessVm(write: true, address + offset, data.Slice(offset, chunk)))
+                return false;
+            offset += chunk;
+        }
+
+        return true;
+    }
+
+    private void Unprotect(nint address, int length)
+    {
+        var start = (long)address & ~(PageSize - 1);
+        var end = ((long)address + length + PageSize - 1) & ~(PageSize - 1);
+        var size = end - start;
+        var gadget = EnsureSyscallGadget();
+        var tid = _attachedTids[0];
+
+        long result = _is64Bit
+            ? (long)InjectSyscall64(tid, gadget, SysMprotect, (ulong)start, (ulong)size, ProtReadWriteExec, 0, 0, 0)
+            : InjectSyscall32(tid, gadget, SysMprotect32, (uint)start, (uint)size, ProtReadWriteExec);
+
+        if (result is < 0 and > -4096)
+            throw new InvalidOperationException($"mprotect in the client process failed (errno {-result}).");
+    }
+
+    private unsafe int InjectSyscall32(int tid, nint gadget, uint eax, uint ebx, uint ecx, uint edx)
+    {
+        var regs = new Native.UserRegs32();
+        if (Native.ptrace(Native.PTRACE_GETREGS, tid, 0, (nint)(&regs)) != 0)
+            throw PtraceFailed("PTRACE_GETREGS");
+
+        var saved = regs;
+        regs.eax = eax;
+        regs.ebx = ebx;
+        regs.ecx = ecx;
+        regs.edx = edx;
+        regs.eip = (uint)gadget;
+
+        if (Native.ptrace(Native.PTRACE_SETREGS, tid, 0, (nint)(&regs)) != 0)
+            throw PtraceFailed("PTRACE_SETREGS");
+
+        try
+        {
+            if (Native.ptrace(Native.PTRACE_SINGLESTEP, tid, 0, 0) != 0)
+                throw PtraceFailed("PTRACE_SINGLESTEP");
+            if (Native.waitpid(tid, out _, 0) < 0)
+                throw PtraceFailed("waitpid");
+
+            if (Native.ptrace(Native.PTRACE_GETREGS, tid, 0, (nint)(&regs)) != 0)
+                throw PtraceFailed("PTRACE_GETREGS");
+
+            return (int)regs.eax;
+        }
+        finally
+        {
+            Native.ptrace(Native.PTRACE_SETREGS, tid, 0, (nint)(&saved));
+        }
+    }
+
+    private void WriteViaPtrace(nint address, ReadOnlySpan<byte> data)
+    {
+        var tid = _attachedTids[0];
+        var wordSize = _is64Bit ? 8 : 4;
+        var start = (long)address;
+        var end = start + data.Length;
+        var aligned = start & ~(wordSize - 1);
+
+        for (var addr = aligned; addr < end; addr += wordSize)
+        {
+            var wordBytes = new byte[wordSize];
+            var needsPeek = addr < start || addr + wordSize > end;
+            if (needsPeek)
+            {
+                Marshal.SetLastPInvokeError(0);
+                var peeked = Native.ptrace(Native.PTRACE_PEEKDATA, tid, (nint)addr, 0);
+                if (peeked == -1 && Marshal.GetLastPInvokeError() != 0)
+                    throw PtraceFailed("PTRACE_PEEKDATA");
+
+                var peekValue = _is64Bit ? (ulong)peeked : (uint)peeked;
+                BitConverter.GetBytes(peekValue).AsSpan(0, wordSize).CopyTo(wordBytes);
+            }
+
+            for (var i = 0; i < wordSize; i++)
+            {
+                var sourceIndex = addr + i - start;
+                if (sourceIndex >= 0 && sourceIndex < data.Length)
+                    wordBytes[i] = data[(int)sourceIndex];
+            }
+
+            nint poke = _is64Bit
+                ? (nint)BitConverter.ToInt64(wordBytes, 0)
+                : (nint)BitConverter.ToUInt32(wordBytes, 0);
+
+            if (Native.ptrace(Native.PTRACE_POKEDATA, tid, (nint)addr, poke) != 0)
+                throw PtraceFailed("PTRACE_POKEDATA");
+        }
+    }
+
     private void ReadProcMem(nint address, Span<byte> buffer)
     {
         using var fs = new FileStream($"/proc/{Id}/mem", FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         fs.Seek((long)address, SeekOrigin.Begin);
         fs.ReadExactly(buffer);
-    }
-
-    private void WriteProcMem(nint address, ReadOnlySpan<byte> buffer)
-    {
-        using var fs = new FileStream($"/proc/{Id}/mem", FileMode.Open, FileAccess.Write, FileShare.ReadWrite);
-        fs.Seek((long)address, SeekOrigin.Begin);
-        fs.Write(buffer);
     }
 
     private static bool IsElf64(int pid)
@@ -566,7 +687,7 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
         internal static extern unsafe nint process_vm_writev(int pid, Iovec* localIov, nuint liovcnt, Iovec* remoteIov, nuint riovcnt, nuint flags);
 
         [DllImport("libc", SetLastError = true)]
-        internal static extern int ptrace(int request, int pid, nint addr, nint data);
+        internal static extern nint ptrace(int request, int pid, nint addr, nint data);
 
         [DllImport("libc", SetLastError = true)]
         internal static extern int waitpid(int pid, out int status, int options);

@@ -138,8 +138,20 @@ public static class ClientProcessLauncher
 
     private static bool IsAttachFailure(Exception ex)
     {
-        var message = ex.Message;
-        return message.Contains("ptrace", StringComparison.OrdinalIgnoreCase)
-            || message.Contains("Timed out waiting", StringComparison.OrdinalIgnoreCase);
+        for (var current = ex; current is not null; current = current.InnerException)
+        {
+            if (current is IOException)
+                return true;
+
+            var message = current.Message;
+            if (message.Contains("ptrace", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("Timed out waiting", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("/proc/", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("input/output error", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("mprotect", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 }
