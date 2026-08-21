@@ -25,15 +25,19 @@ public static class LinuxClientRuntime
     }
 
     /// <summary>
-    /// Copies the game exe into the Proton prefix so we can patch that copy without
-    /// modifying the user's client directory.
+    /// Copies the game exe beside the original (same folder as Data/*.MPQ). WoW
+    /// resolves Data relative to the executable path, so a copy under the Proton
+    /// prefix cannot see the game archives. The original <c>Wow-64.exe</c> is not modified.
     /// </summary>
     public static string PreparePatchedClientCopy(string exePath, string? protonPrefixPath)
     {
-        var prefix = ResolvePrefix(protonPrefixPath);
-        var dir = Path.Combine(prefix, "skyfire-patched");
-        Directory.CreateDirectory(dir);
-        var dest = Path.Combine(dir, Path.GetFileName(exePath));
+        _ = protonPrefixPath;
+        var dir = Path.GetDirectoryName(Path.GetFullPath(exePath))
+                  ?? throw new InvalidOperationException("Client path has no directory.");
+        var name = Path.GetFileNameWithoutExtension(exePath);
+        var ext = Path.GetExtension(exePath);
+        // Sidecar next to Data/ — do not overwrite the user's unpatched client.
+        var dest = Path.Combine(dir, $"{name}.skyfire{ext}");
         File.Copy(exePath, dest, overwrite: true);
         return dest;
     }

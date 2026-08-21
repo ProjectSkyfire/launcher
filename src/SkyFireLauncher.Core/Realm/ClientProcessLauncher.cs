@@ -9,10 +9,10 @@ namespace SkyFireLauncher.Realm;
 // (original on-disk exe untouched).
 //
 // Linux: Proton's Steam runtime / ptrace isolation makes live memory patches kill
-// the client or deny /proc maps. Instead we copy the exe into the Proton prefix,
-// apply the same hostname + login-flow patches to that copy only, and launch it
-// with a normal `proton run` (Steam runtime on) so the game can open a window.
-// The user's game-directory client stays unmodified.
+// the client or deny /proc maps. Instead we write a sidecar next to the original
+// (e.g. Wow-64.skyfire.exe in the same folder as Data/), apply hostname + login-flow
+// patches to that file only, and launch it with a normal `proton run` so MPQs and
+// graphics both work. The original Wow-64.exe stays unmodified.
 public static class ClientProcessLauncher
 {
     /// <summary>Status text while Linux launch/patch is in progress (UI poll).</summary>

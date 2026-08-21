@@ -76,12 +76,12 @@ launching `Wow.exe` / `Wow-64.exe` through [Proton](https://github.com/ValveSoft
    are detected from Steam and `compatibilitytools.d`. Leave **Proton Prefix**
    empty to use `~/.local/share/SkyFireLauncher/proton`.
 
-The Linux launcher copies `Wow.exe` / `Wow-64.exe` into the Proton prefix,
-applies hostname + login-flow patches to **that copy only** (your game folder
-stays unmodified), then starts it with a normal `proton run` — including
-`*-slr` builds — so graphics work like a manual launch script. Windows still
-uses live in-memory patches. Config is stored at
-`~/.config/SkyFireLauncher/config.json`.
+The Linux launcher writes a sidecar next to your client (e.g.
+`Wow-64.skyfire.exe` in the same folder as `Data/`), applies hostname +
+login-flow patches to **that file only**, then starts it with a normal
+`proton run` — including `*-slr` builds — so MPQs and graphics both work.
+Your original `Wow-64.exe` is not modified. Windows still uses live
+in-memory patches. Config is stored at `~/.config/SkyFireLauncher/config.json`.
 
 #### Arch Linux
 
@@ -143,8 +143,9 @@ and the launcher pointed at `Wow.exe` / `Wow-64.exe`.
 If **PLAY** fails:
 
 - Prefer **proton-cachyos-slr** or **GE-Proton** (same family as a working
-  manual `proton run`). The Linux launcher patches a copy under
-  `~/.local/share/SkyFireLauncher/proton/skyfire-patched/`, not your game dir.
+  manual `proton run`). The Linux launcher patches a sidecar
+  `Wow-64.skyfire.exe` beside your client (same folder as `Data/`), not the
+  original exe and not a copy under the Proton prefix.
 - Empty Proton list — install Steam Proton (or GE / cachyos) and reopen Configuration
 - Black screen / no Vulkan — missing GPU ICD, or 32-bit Wow without lib32
   Vulkan
