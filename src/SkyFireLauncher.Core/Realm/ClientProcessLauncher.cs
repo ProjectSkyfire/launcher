@@ -106,6 +106,9 @@ public static class ClientProcessLauncher
         var hostProcess = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Failed to start {Path.GetFileName(startInfo.FileName)}.");
 
+        if (OperatingSystem.IsLinux())
+            LinuxClientRuntime.AttachLaunchLog(hostProcess, startInfo);
+
         int? clientPid = null;
         try
         {
@@ -114,6 +117,20 @@ public static class ClientProcessLauncher
             var fileBuffer = File.ReadAllBytes(exePath);
             var (baseAddress, moduleSize) = LinuxRemoteProcess.FindPeModule(clientPid.Value, exePath, fileBuffer);
             ClientImagePatcher.Apply(process, baseAddress, moduleSize, exePath, targetAddress, enableAuthnetLogin);
+
+            // Wow can appear in /proc/*/maps before import resolution finishes.
+            // If d3d9/DXVK is missing, the process dies right after we patch.
+            if (!WaitForClientStillAlive(clientPid.Value, TimeSpan.FromSeconds(2)))
+            {
+                var logHint = startInfo.Environment.TryGetValue("SKYFIRE_LAUNCH_LOG", out var log) &&
+                              !string.IsNullOrWhiteSpace(log)
+                    ? $" See {log}."
+                    : string.Empty;
+                throw new InvalidOperationException(
+                    "The client exited immediately after launch (often missing DXVK d3d9.dll in the Proton prefix). " +
+                    "Delete ~/.local/share/SkyFireLauncher/proton, pick GE-Proton or Steam Proton 9+, and try again." +
+                    logHint);
+            }
         }
         catch
         {
@@ -133,6 +150,32 @@ public static class ClientProcessLauncher
             }
 
             throw;
+        }
+    }
+
+    private static bool WaitForClientStillAlive(int pid, TimeSpan duration)
+    {
+        var deadline = DateTime.UtcNow + duration;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (!IsPidAlive(pid))
+                return false;
+            Thread.Sleep(100);
+        }
+
+        return IsPidAlive(pid);
+    }
+
+    private static bool IsPidAlive(int pid)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            return !process.HasExited;
+        }
+        catch
+        {
+            return false;
         }
     }
 

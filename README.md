@@ -140,14 +140,18 @@ and the launcher pointed at `Wow.exe` / `Wow-64.exe`.
 If **PLAY** fails:
 
 - Empty Proton list — install Steam Proton (or GE) and reopen Configuration
+- Prefer **GE-Proton** or Steam **Proton 9/Experimental** over `proton-cachyos` /
+  wine-cachyos when both are listed
 - `ptrace` / “could not attach” — same user as the game, and
   `kernel.yama.ptrace_scope` is `0` or `1`
   (`cat /proc/sys/kernel/yama/ptrace_scope`)
 - Black screen / no Vulkan — missing GPU ICD, or 32-bit Wow without lib32
   Vulkan
-- `d3d9.dll` / `libvkd3d` not found — the Proton prefix was created without
-  DXVK. Delete it and launch again:
+- `d3d9.dll` / `libvkd3d` / “exited immediately after launch” — DXVK never
+  landed in the prefix. Delete it, pick GE/Steam Proton, and launch again:
   `rm -rf ~/.local/share/SkyFireLauncher/proton`
+  Details are written to
+  `~/.local/share/SkyFireLauncher/proton/skyfire-launch.log`
 - Client starts but logs into retail/Battle.net — the in-memory patch did
   not land; check the status line under PLAY
 

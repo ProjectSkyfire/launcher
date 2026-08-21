@@ -104,6 +104,7 @@ public static class LinuxClientRuntime
 
         var prefix = ResolvePrefix(protonPrefixPath);
         Directory.CreateDirectory(prefix);
+        EnsureProtonGraphicsStack(protonInstallPath, prefix);
 
         var startInfo = new ProcessStartInfo
         {
@@ -115,6 +116,47 @@ public static class LinuxClientRuntime
         startInfo.Environment["WINEPREFIX"] = Path.Combine(prefix, "pfx");
         ApplyProtonEnvironment(startInfo, protonInstallPath, prefix);
         return startInfo;
+    }
+
+    /// <summary>
+    /// Copies DXVK (and libvkd3d fallbacks) into the Proton prefix. Newer Proton
+    /// builds keep DLLs under wine/dxvk/x86_64-windows/; if prefix setup skips
+    /// that step, Wine's d3d9.dll loads instead and dies on missing libvkd3d.
+    /// </summary>
+    public static void EnsureProtonGraphicsStack(string protonInstallPath, string compatDataPath)
+    {
+        var pfx = Path.Combine(compatDataPath, "pfx");
+        var system32 = Path.Combine(pfx, "drive_c", "windows", "system32");
+        var syswow64 = Path.Combine(pfx, "drive_c", "windows", "syswow64");
+        Directory.CreateDirectory(system32);
+        Directory.CreateDirectory(syswow64);
+
+        string[] dxvkNames = ["d3d9.dll", "d3d11.dll", "d3d10core.dll", "dxgi.dll"];
+        var copiedDxvk = 0;
+        foreach (var name in dxvkNames)
+        {
+            if (TryInstallProtonDll(protonInstallPath, name, system32, sixtyFourBit: true))
+                copiedDxvk++;
+            TryInstallProtonDll(protonInstallPath, name, syswow64, sixtyFourBit: false);
+        }
+
+        foreach (var name in new[]
+                 {
+                     "libvkd3d-1.dll",
+                     "libvkd3d-shader-1.dll",
+                     "libvkd3d-utils-1.dll",
+                 })
+        {
+            TryInstallProtonDll(protonInstallPath, name, system32, sixtyFourBit: true);
+            TryInstallProtonDll(protonInstallPath, name, syswow64, sixtyFourBit: false);
+        }
+
+        if (copiedDxvk == 0)
+        {
+            throw new InvalidOperationException(
+                $"Proton at '{protonInstallPath}' has no DXVK d3d9.dll. Pick GE-Proton or Steam Proton 9+, " +
+                "or delete the prefix after installing one: rm -rf ~/.local/share/SkyFireLauncher/proton");
+        }
     }
 
     public static TimeSpan ReadyTimeout(LinuxCompatibilityLayer layer) =>
@@ -141,6 +183,7 @@ public static class LinuxClientRuntime
     {
         var prefix = ResolvePrefix(protonPrefixPath);
         Directory.CreateDirectory(prefix);
+        EnsureProtonGraphicsStack(proton.InstallPath, prefix);
 
         var umu = FindOnPath("umu-run") ?? FindOnPath("umu");
         var startInfo = new ProcessStartInfo
@@ -170,14 +213,189 @@ public static class LinuxClientRuntime
 
     private static void ApplyProtonEnvironment(ProcessStartInfo startInfo, string protonInstallPath, string prefix)
     {
+        var winePrefix = Path.Combine(prefix, "pfx");
         startInfo.Environment["STEAM_COMPAT_DATA_PATH"] = prefix;
+        startInfo.Environment["WINEPREFIX"] = winePrefix;
         startInfo.Environment["PROTONPATH"] = protonInstallPath;
         // Wow 5.4.8 is D3D9; force DXVK instead of wined3d/vkd3d.
         startInfo.Environment["PROTON_USE_WINED3D"] = "0";
+        MergeWineDllOverrides(startInfo, "d3d9,d3d11,d3d10core,dxgi=n");
 
-        var steamRoot = FindSteamRoot();
-        if (steamRoot is not null)
-            startInfo.Environment["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = steamRoot;
+        var steamRoot = FindSteamRoot() ?? EnsureSteamClientStub(prefix);
+        startInfo.Environment["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = steamRoot;
+
+        var logPath = Path.Combine(prefix, "skyfire-launch.log");
+        startInfo.Environment["WINEDEBUG"] = startInfo.Environment.TryGetValue("WINEDEBUG", out var existing) &&
+                                             !string.IsNullOrWhiteSpace(existing)
+            ? existing
+            : "+err,+module";
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
+        startInfo.CreateNoWindow = true;
+        // Consumers must call AttachLaunchLog after Process.Start.
+        startInfo.Environment["SKYFIRE_LAUNCH_LOG"] = logPath;
+    }
+
+    public static void AttachLaunchLog(Process hostProcess, ProcessStartInfo startInfo)
+    {
+        if (!startInfo.RedirectStandardError && !startInfo.RedirectStandardOutput)
+            return;
+
+        if (!startInfo.Environment.TryGetValue("SKYFIRE_LAUNCH_LOG", out var logPath) ||
+            string.IsNullOrWhiteSpace(logPath))
+            return;
+
+        try
+        {
+            var dir = Path.GetDirectoryName(logPath);
+            if (!string.IsNullOrEmpty(dir))
+                Directory.CreateDirectory(dir);
+
+            var writer = new StreamWriter(new FileStream(logPath, FileMode.Create, FileAccess.Write, FileShare.Read))
+            {
+                AutoFlush = true
+            };
+            hostProcess.OutputDataReceived += (_, e) =>
+            {
+                if (e.Data is not null)
+                    lock (writer) writer.WriteLine(e.Data);
+            };
+            hostProcess.ErrorDataReceived += (_, e) =>
+            {
+                if (e.Data is not null)
+                    lock (writer) writer.WriteLine(e.Data);
+            };
+            hostProcess.BeginOutputReadLine();
+            hostProcess.BeginErrorReadLine();
+            hostProcess.Exited += (_, _) =>
+            {
+                try { lock (writer) writer.Dispose(); } catch { /* ignore */ }
+            };
+            hostProcess.EnableRaisingEvents = true;
+        }
+        catch
+        {
+            // Logging is best-effort; launching still proceeds.
+        }
+    }
+
+    private static void MergeWineDllOverrides(ProcessStartInfo startInfo, string addition)
+    {
+        if (startInfo.Environment.TryGetValue("WINEDLLOVERRIDES", out var existing) &&
+            !string.IsNullOrWhiteSpace(existing))
+        {
+            startInfo.Environment["WINEDLLOVERRIDES"] = existing.TrimEnd(';') + ";" + addition;
+        }
+        else
+        {
+            startInfo.Environment["WINEDLLOVERRIDES"] = addition;
+        }
+    }
+
+    private static string EnsureSteamClientStub(string compatDataPath)
+    {
+        // Proton's setup_prefix requires STEAM_COMPAT_CLIENT_INSTALL_PATH and
+        // reads legacycompat optionally. A stub keeps prefix setup from aborting.
+        var stub = Path.Combine(compatDataPath, "steam-client-stub");
+        Directory.CreateDirectory(Path.Combine(stub, "legacycompat"));
+        return stub;
+    }
+
+    private static bool TryInstallProtonDll(
+        string protonInstallPath,
+        string fileName,
+        string destinationDirectory,
+        bool sixtyFourBit)
+    {
+        var source = FindProtonDll(protonInstallPath, fileName, sixtyFourBit);
+        if (source is null)
+            return false;
+
+        var destination = Path.Combine(destinationDirectory, fileName);
+        try
+        {
+            File.Copy(source, destination, overwrite: true);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string? FindProtonDll(string protonInstallPath, string fileName, bool sixtyFourBit)
+    {
+        var relative = sixtyFourBit
+            ? new[]
+            {
+                Path.Combine("files", "lib64", "wine", "dxvk", "x86_64-windows", fileName),
+                Path.Combine("files", "lib", "wine", "dxvk", "x86_64-windows", fileName),
+                Path.Combine("files", "lib64", "wine", "dxvk", fileName),
+                Path.Combine("files", "lib", "wine", "dxvk", fileName),
+                Path.Combine("files", "lib64", "vkd3d", fileName),
+                Path.Combine("files", "lib", "vkd3d", fileName),
+                Path.Combine("files", "lib64", "wine", "x86_64-windows", fileName),
+                Path.Combine("files", "lib", "wine", "x86_64-windows", fileName),
+                Path.Combine("files", "share", "default_pfx", "drive_c", "windows", "system32", fileName),
+                Path.Combine("dist", "lib64", "wine", "dxvk", fileName),
+                Path.Combine("dist", "lib", "wine", "dxvk", "x86_64-windows", fileName),
+            }
+            : new[]
+            {
+                Path.Combine("files", "lib", "wine", "dxvk", "i386-windows", fileName),
+                Path.Combine("files", "lib64", "wine", "dxvk", "i386-windows", fileName),
+                Path.Combine("files", "lib", "wine", "dxvk", fileName),
+                Path.Combine("files", "lib", "vkd3d", fileName),
+                Path.Combine("files", "lib64", "vkd3d", fileName),
+                Path.Combine("files", "lib", "wine", "i386-windows", fileName),
+                Path.Combine("files", "share", "default_pfx", "drive_c", "windows", "syswow64", fileName),
+                Path.Combine("dist", "lib", "wine", "dxvk", fileName),
+                Path.Combine("dist", "lib", "wine", "dxvk", "i386-windows", fileName),
+            };
+
+        foreach (var rel in relative)
+        {
+            var candidate = Path.Combine(protonInstallPath, rel);
+            if (File.Exists(candidate))
+                return candidate;
+        }
+
+        // Last resort for odd Proton layouts (search wine/dxvk and vkd3d trees).
+        foreach (var rootName in new[] { "files", "dist" })
+        {
+            var root = Path.Combine(protonInstallPath, rootName);
+            if (!Directory.Exists(root))
+                continue;
+
+            try
+            {
+                foreach (var path in Directory.EnumerateFiles(root, fileName, SearchOption.AllDirectories))
+                {
+                    var normalized = path.Replace('\\', '/');
+                    var inDxvk = normalized.Contains("/dxvk/", StringComparison.OrdinalIgnoreCase);
+                    var inVkd3d = normalized.Contains("/vkd3d", StringComparison.OrdinalIgnoreCase);
+                    if (!inDxvk && !inVkd3d)
+                        continue;
+
+                    if (sixtyFourBit)
+                    {
+                        if (normalized.Contains("/i386-windows/", StringComparison.OrdinalIgnoreCase))
+                            continue;
+                        return path;
+                    }
+
+                    if (normalized.Contains("/x86_64-windows/", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    return path;
+                }
+            }
+            catch
+            {
+                // Ignore unreadable trees.
+            }
+        }
+
+        return null;
     }
 
     private static string ResolvePrefix(string? protonPrefixPath) =>
@@ -235,6 +453,8 @@ public static class LinuxClientRuntime
         {
             Path.Combine(home, ".steam", "root", "compatibilitytools.d"),
             Path.Combine(home, ".local", "share", "Steam", "compatibilitytools.d"),
+            "/usr/share/steam/compatibilitytools.d",
+            "/usr/share/proton",
         })
         {
             foreach (var child in SafeGetDirectories(toolsDir))
@@ -302,6 +522,11 @@ public static class LinuxClientRuntime
     private static int Rank(ProtonInstall install)
     {
         var name = install.DisplayName;
+        // wine-cachyos / experimental Wine builds often ship nested DXVK paths and
+        // create bare prefixes when used outside Steam; prefer Valve/GE first.
+        if (name.Contains("cachyos", StringComparison.OrdinalIgnoreCase) ||
+            name.StartsWith("wine-", StringComparison.OrdinalIgnoreCase))
+            return 8;
         if (name.StartsWith("GE-Proton", StringComparison.OrdinalIgnoreCase) ||
             name.StartsWith("Proton-GE", StringComparison.OrdinalIgnoreCase))
             return 0;
@@ -309,7 +534,9 @@ public static class LinuxClientRuntime
             return 1;
         if (name.Contains("Hotfix", StringComparison.OrdinalIgnoreCase))
             return 2;
-        return 3;
+        if (name.StartsWith("Proton", StringComparison.OrdinalIgnoreCase))
+            return 3;
+        return 5;
     }
 
     internal static string? FindOnPath(string name)
