@@ -255,6 +255,20 @@ public partial class MainWindow : Window
             ProtonPrefixPath = _config.ProtonPrefixPath
         };
         var runtime = _config.LinuxRuntime == LinuxCompatibilityLayer.Proton ? "Proton" : "Wine";
+        var startedUtc = DateTime.UtcNow;
+
+        var statusTimer = new System.Threading.Timer(_ =>
+        {
+            var seconds = (int)(DateTime.UtcNow - startedUtc).TotalSeconds;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (!LaunchButton.IsEnabled)
+                {
+                    LaunchStatusTextBlock.Text =
+                        $"Still starting via {runtime}… {seconds}s (waiting for Wow + d3d9)";
+                }
+            });
+        }, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
 
         try
         {
@@ -289,6 +303,7 @@ public partial class MainWindow : Window
         }
         finally
         {
+            await statusTimer.DisposeAsync().ConfigureAwait(true);
             LaunchButton.IsEnabled = true;
         }
     }

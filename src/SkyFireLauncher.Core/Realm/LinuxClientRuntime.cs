@@ -243,6 +243,8 @@ public static class LinuxClientRuntime
         startInfo.Environment["GAMEID"] = "0";
         startInfo.Environment["UMU_NO_RUNTIME"] = "1";
         startInfo.Environment["PROTON_NO_STEAM_RUNTIME"] = "1";
+        startInfo.Environment["PROTONFIXES_DISABLE"] = "1";
+        startInfo.Environment["PROTON_FSR4_UPGRADE"] = "0";
         ApplyProtonEnvironment(startInfo, selected.InstallPath, prefix);
         startInfo.Environment["PROTONPATH"] = "GE-Proton";
         return startInfo;
@@ -267,6 +269,11 @@ public static class LinuxClientRuntime
         startInfo.Environment["PROTON_NO_STEAM_RUNTIME"] = "1";
         startInfo.Environment["STEAM_RUNTIME"] = "0";
         startInfo.Environment["UMU_NO_RUNTIME"] = "1";
+        // ProtonFixes was auto-downloading FSR4 DLLs and stalling first launch.
+        startInfo.Environment["PROTONFIXES_DISABLE"] = "1";
+        startInfo.Environment["PROTON_FSR4_UPGRADE"] = "0";
+        startInfo.Environment["PROTON_FSR4_RDNA3_UPGRADE"] = "0";
+        startInfo.Environment["PROTON_DLSS_UPGRADE"] = "0";
         return startInfo;
     }
 
@@ -381,10 +388,33 @@ public static class LinuxClientRuntime
                 Environment.GetEnvironmentVariable("SKYFIRE_WINEDEBUG") ?? "-all";
         }
 
-        startInfo.RedirectStandardOutput = true;
-        startInfo.RedirectStandardError = true;
+        // Only capture logs when explicitly debugging. Redirected pipes can stall
+        // Proton/ProtonFixes while it downloads or wineboots (looks like a UI freeze).
+        var captureLog = string.Equals(
+            Environment.GetEnvironmentVariable("SKYFIRE_LAUNCH_DEBUG"), "1", StringComparison.Ordinal);
+        if (captureLog)
+        {
+            startInfo.RedirectStandardOutput = true;
+            startInfo.RedirectStandardError = true;
+            startInfo.Environment["SKYFIRE_LAUNCH_LOG"] = logPath;
+        }
+        else
+        {
+            startInfo.RedirectStandardOutput = false;
+            startInfo.RedirectStandardError = false;
+            try
+            {
+                File.WriteAllText(logPath,
+                    $"SkyFire launch {DateTime.UtcNow:o}\n" +
+                    "Set SKYFIRE_LAUNCH_DEBUG=1 to capture Proton/Wine stderr.\n");
+            }
+            catch
+            {
+                // optional
+            }
+        }
+
         startInfo.CreateNoWindow = true;
-        startInfo.Environment["SKYFIRE_LAUNCH_LOG"] = logPath;
 
         TryAddSteamCompatMounts(startInfo, Environment.GetEnvironmentVariable("STEAM_COMPAT_INSTALL_PATH"));
     }
