@@ -150,6 +150,9 @@ If **PLAY** fails:
   (`cat /proc/sys/kernel/yama/ptrace_scope`)
 - Black screen / no Vulkan — missing GPU ICD, or 32-bit Wow without lib32
   Vulkan
+- `tracked_files` / Proton traceback on launch — a Wine-only prefix was reused
+  by GE-Proton. The launcher resets this automatically; if it still fails:
+  `rm -rf ~/.local/share/SkyFireLauncher/proton`
 - `d3d9.dll` / `libvkd3d` / “exited immediately” / “No DXVK d3d9.dll” —
   your Proton build may not ship host-side DXVK (common with
   `proton-cachyos-native`). Install system DXVK, then delete the prefix:

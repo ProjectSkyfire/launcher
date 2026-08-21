@@ -101,6 +101,7 @@ public static class LinuxClientRuntime
         var prefix = ResolvePrefix(protonPrefixPath);
         Directory.CreateDirectory(prefix);
         StopPrefixWineServer(prefix, protonInstallPath);
+        RepairProtonCompatData(prefix);
         if (!TryEnsureProtonGraphicsStack(protonInstallPath, prefix))
         {
             throw new InvalidOperationException(
@@ -195,6 +196,7 @@ public static class LinuxClientRuntime
         var umu = FindOnPath("umu-run") ?? FindOnPath("umu");
         var selected = PreferAttachableProton(proton);
         StopPrefixWineServer(prefix, selected.InstallPath);
+        RepairProtonCompatData(prefix);
         var hasDxvk = TryEnsureProtonGraphicsStack(selected.InstallPath, prefix);
 
         // Prefer an on-disk GE-Proton (umu may already have downloaded it) over a
@@ -499,6 +501,36 @@ public static class LinuxClientRuntime
         {
             // Logging is best-effort; launching still proceeds.
         }
+    }
+
+    /// <summary>
+    /// GE/Valve Proton crashes if a Wine-created prefix exists without Proton's
+    /// tracked_files bookkeeping (FileNotFoundError in update_builtin_libs).
+    /// Reset that broken compatdata so the next <c>proton run</c> can copy_pfx.
+    /// </summary>
+    public static void RepairProtonCompatData(string compatDataPath)
+    {
+        var trackedFiles = Path.Combine(compatDataPath, "tracked_files");
+        var pfx = Path.Combine(compatDataPath, "pfx");
+        var userReg = Path.Combine(pfx, "user.reg");
+
+        var hasWinePrefix = File.Exists(userReg) || Directory.Exists(Path.Combine(pfx, "drive_c"));
+        if (!hasWinePrefix || File.Exists(trackedFiles))
+            return;
+
+        try
+        {
+            if (Directory.Exists(compatDataPath))
+                Directory.Delete(compatDataPath, recursive: true);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                "Proton prefix is incomplete (missing tracked_files) and could not be reset automatically. " +
+                $"Delete it manually: rm -rf '{compatDataPath}' ({ex.Message})");
+        }
+
+        Directory.CreateDirectory(compatDataPath);
     }
 
     private static void StopPrefixWineServer(string compatDataPath, string? protonInstallPath = null)
