@@ -193,61 +193,31 @@ public static class LinuxClientRuntime
         var prefix = ResolvePrefix(protonPrefixPath);
         Directory.CreateDirectory(prefix);
 
-        var umu = FindOnPath("umu-run") ?? FindOnPath("umu");
         var selected = PreferAttachableProton(proton);
         StopPrefixWineServer(prefix, selected.InstallPath);
         RepairProtonCompatData(prefix);
-        var hasDxvk = TryEnsureProtonGraphicsStack(selected.InstallPath, prefix);
 
-        // Prefer an on-disk GE-Proton (umu may already have downloaded it) over a
-        // Proton build that ships no host-side DXVK (e.g. proton-cachyos-native).
-        if (!hasDxvk)
+        // *-slr / pressure-vessel blocks ptrace — never launch through it. Prefer GE
+        // (or any non-SLR) with a normal `proton run` so DXVK/Vulkan get a real window.
+        // Stripping the Steam runtime (PROTON_NO_STEAM_RUNTIME) left Wow-64.exe alive
+        // with no GUI on Arch; launch-wow.sh keeps the runtime and gets a window.
+        if (IsSteamRuntimeProton(selected.DisplayName) ||
+            IsSteamRuntimeProton(selected.InstallPath))
         {
-            var ge = FindInstalledGeProton();
-            if (ge is not null &&
-                !ge.InstallPath.Equals(selected.InstallPath, StringComparison.OrdinalIgnoreCase))
-            {
-                selected = ge;
-                StopPrefixWineServer(prefix, selected.InstallPath);
-                hasDxvk = TryEnsureProtonGraphicsStack(selected.InstallPath, prefix);
-            }
+            selected = FindInstalledGeProton()
+                       ?? DiscoverProtonInstalls().FirstOrDefault(p =>
+                           !IsSteamRuntimeProton(p.DisplayName) &&
+                           !IsSteamRuntimeProton(p.InstallPath))
+                       ?? throw new InvalidOperationException(
+                           "This Proton build uses Steam Linux Runtime (*-slr), which blocks " +
+                           "in-memory patches. Install GE-Proton (ProtonUp-Qt or umu) and select it.");
+            StopPrefixWineServer(prefix, selected.InstallPath);
+            RepairProtonCompatData(prefix);
         }
 
-        if (hasDxvk)
-        {
-            // GE/Valve `proton run` sets up DXVK/Vulkan correctly. Avoid umu/*-slr
-            // (pressure-vessel blocks ptrace). Fall back to bare wine only when
-            // the selected install is an SLR build with no better alternative.
-            if (IsSteamRuntimeProton(selected.DisplayName) ||
-                IsSteamRuntimeProton(selected.InstallPath))
-            {
-                return BuildDirectProtonWineStartInfo(
-                    selected.InstallPath, exePath, workingDirectory, prefix, is64BitClient);
-            }
-
-            return BuildProtonScriptStartInfo(selected, exePath, workingDirectory, prefix);
-        }
-
-        if (umu is null)
-            throw new InvalidOperationException(BuildMissingDxvkMessage(selected.InstallPath, umuAvailable: false));
-
-        // First-time GE download via umu, with Steam runtime disabled for ptrace.
-        var startInfo = new ProcessStartInfo
-        {
-            WorkingDirectory = workingDirectory,
-            UseShellExecute = false,
-            FileName = umu,
-        };
-        AddClientArguments(startInfo, exePath);
-        startInfo.Environment["PROTONPATH"] = "GE-Proton";
-        startInfo.Environment["GAMEID"] = "0";
-        startInfo.Environment["UMU_NO_RUNTIME"] = "1";
-        startInfo.Environment["PROTON_NO_STEAM_RUNTIME"] = "1";
-        startInfo.Environment["PROTONFIXES_DISABLE"] = "1";
-        startInfo.Environment["PROTON_FSR4_UPGRADE"] = "0";
-        ApplyProtonEnvironment(startInfo, selected.InstallPath, prefix, workingDirectory);
-        startInfo.Environment["PROTONPATH"] = "GE-Proton";
-        return startInfo;
+        // Let Proton's own script install DXVK into the prefix (do not prefer bare wine).
+        TryEnsureProtonGraphicsStack(selected.InstallPath, prefix);
+        return BuildProtonScriptStartInfo(selected, exePath, workingDirectory, prefix);
     }
 
     private static ProcessStartInfo BuildProtonScriptStartInfo(
@@ -265,13 +235,9 @@ public static class LinuxClientRuntime
         startInfo.ArgumentList.Add("run");
         AddClientArguments(startInfo, exePath);
         ApplyProtonEnvironment(startInfo, proton.InstallPath, prefix, workingDirectory);
-        // Stay on the host namespace so ptrace can attach (no pressure-vessel).
-        // launch-wow.sh uses *-slr for a pre-patched exe; we cannot — authnet
-        // needs live memory patches from the host.
-        startInfo.Environment["PROTON_NO_STEAM_RUNTIME"] = "1";
-        startInfo.Environment["STEAM_RUNTIME"] = "0";
-        startInfo.Environment["UMU_NO_RUNTIME"] = "1";
-        // ProtonFixes was auto-downloading FSR4 DLLs and stalling first launch.
+        // Keep Steam runtime libs (Vulkan/DXVK) — required for a game window.
+        // Do NOT set PROTON_NO_STEAM_RUNTIME here; that produced a headless Wow process.
+        // Still avoid *-slr pressure-vessel (handled by PreferAttachableProton / above).
         startInfo.Environment["PROTONFIXES_DISABLE"] = "1";
         startInfo.Environment["PROTON_FSR4_UPGRADE"] = "0";
         startInfo.Environment["PROTON_FSR4_RDNA3_UPGRADE"] = "0";
@@ -419,6 +385,12 @@ public static class LinuxClientRuntime
         CopyEnvIfPresent(startInfo, "XDG_RUNTIME_DIR");
         CopyEnvIfPresent(startInfo, "XDG_SESSION_TYPE");
         CopyEnvIfPresent(startInfo, "DBUS_SESSION_BUS_ADDRESS");
+        CopyEnvIfPresent(startInfo, "VK_ICD_FILENAMES");
+        CopyEnvIfPresent(startInfo, "VK_DRIVER_FILES");
+        CopyEnvIfPresent(startInfo, "LIBVA_DRIVER_NAME");
+        CopyEnvIfPresent(startInfo, "AMD_VULKAN_ICD");
+        CopyEnvIfPresent(startInfo, "__GLX_VENDOR_LIBRARY_NAME");
+        CopyEnvIfPresent(startInfo, "XDG_CURRENT_DESKTOP");
 
         TryAddSteamCompatMounts(startInfo, workingDirectory);
     }

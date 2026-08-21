@@ -11,6 +11,9 @@ namespace SkyFireLauncher.Realm;
 // its lifetime.
 public static class ClientProcessLauncher
 {
+    /// <summary>Status text while Linux launch/patch is in progress (UI poll).</summary>
+    public static string LaunchWaitStatus { get; internal set; } = string.Empty;
+
     public static int LaunchAndRedirect(
         string exePath,
         string workingDirectory,
@@ -116,8 +119,8 @@ public static class ClientProcessLauncher
         int? clientPid = null;
         try
         {
-            // Real Wow process (cmdline + PE), patch before D3D fully starts, then
-            // confirm graphics came up without having frozen every Wine thread.
+            // Find Wow (PE mapped; prefer ws2_32 ready), patch, detach. Do not wait
+            // for d3d9 — that blocked forever when graphics had not started yet.
             clientPid = LinuxRemoteProcess.WaitForReadyClient(exePath, hostProcess.Id, timeout);
 
             using (var process = new LinuxRemoteProcess(clientPid.Value))
@@ -127,9 +130,9 @@ public static class ClientProcessLauncher
                 ClientImagePatcher.Apply(process, baseAddress, moduleSize, exePath, targetAddress, enableAuthnetLogin);
             }
 
-            LinuxRemoteProcess.WaitForMappedDll(clientPid.Value, "d3d9.dll", TimeSpan.FromSeconds(45));
+            LaunchWaitStatus = $"patched pid {clientPid.Value}, checking alive";
 
-            if (!WaitForClientStillAlive(clientPid.Value, TimeSpan.FromSeconds(5)))
+            if (!WaitForClientStillAlive(clientPid.Value, TimeSpan.FromSeconds(3)))
             {
                 var logHint = startInfo.Environment.TryGetValue("SKYFIRE_LAUNCH_LOG", out var log) &&
                               !string.IsNullOrWhiteSpace(log)
@@ -141,12 +144,13 @@ public static class ClientProcessLauncher
                     logHint);
             }
 
-            if (!LinuxRemoteProcess.CommandLineMentions(clientPid.Value, Path.GetFileName(exePath)))
+            if (!LinuxRemoteProcess.IsClientProcess(clientPid.Value, exePath))
             {
                 throw new InvalidOperationException(
                     "Attached process no longer looks like the WoW client. Try PLAY again.");
             }
 
+            LaunchWaitStatus = string.Empty;
             return clientPid.Value;
         }
         catch

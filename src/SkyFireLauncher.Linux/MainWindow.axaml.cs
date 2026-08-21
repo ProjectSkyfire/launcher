@@ -264,8 +264,10 @@ public partial class MainWindow : Window
             {
                 if (!LaunchButton.IsEnabled)
                 {
-                    LaunchStatusTextBlock.Text =
-                        $"Still starting via {runtime}… {seconds}s (waiting for Wow + d3d9)";
+                    var wait = ClientProcessLauncher.LaunchWaitStatus;
+                    LaunchStatusTextBlock.Text = string.IsNullOrWhiteSpace(wait)
+                        ? $"Still starting via {runtime}… {seconds}s"
+                        : $"Still starting via {runtime}… {seconds}s ({wait})";
                 }
             });
         }, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));

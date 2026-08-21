@@ -167,45 +167,96 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
             $"Timed out waiting for {fileName} to appear in a Wine/Proton process. Is the compatibility layer installed and able to start this client?");
     }
 
+    /// <summary>UI/status line while WaitForReadyClient is spinning.</summary>
+    /// <summary>UI/status line while WaitForReadyClient is spinning.</summary>
+    private static string WaitStatus
+    {
+        get => ClientProcessLauncher.LaunchWaitStatus;
+        set => ClientProcessLauncher.LaunchWaitStatus = value;
+    }
+
     /// <summary>
-    /// Waits for the real game process: cmdline mentions the client exe and the
-    /// PE is mapped. Do not require d3d9 yet — we patch before graphics init so
-    /// ptrace does not freeze DXVK startup (alive process, no window).
+    /// Finds the live Wow process by /proc comm, cmdline, or mapped PE. Prefer
+    /// ws2_32 present (DNS hook), but do not wait on d3d9 — headless clients
+    /// never load it and that hung the launcher forever.
     /// </summary>
     public static int WaitForReadyClient(string exePath, int rootPid, TimeSpan timeout)
     {
         var fileName = Path.GetFileName(exePath);
         var deadline = DateTime.UtcNow + timeout;
+        var sawClient = false;
+        var firstSeen = DateTime.MaxValue;
+        var lastNote = DateTime.UtcNow;
+
+        WaitStatus = $"waiting for {fileName}";
 
         while (DateTime.UtcNow < deadline)
         {
+            int? anyClient = null;
+            int? withWinsock = null;
+
             foreach (var pid in EnumerateCandidateClientPids(rootPid))
             {
-                if (!CommandLineMentions(pid, fileName))
+                if (!IsClientProcess(pid, exePath))
                     continue;
-                if (!MapsContain(pid, exePath, fileName))
-                    continue;
-                return pid;
+
+                if (!sawClient)
+                    firstSeen = DateTime.UtcNow;
+                sawClient = true;
+                anyClient ??= pid;
+
+                if (MapsContainDll(pid, "ws2_32.dll"))
+                {
+                    withWinsock = pid;
+                    break;
+                }
             }
 
-            if (!Directory.Exists($"/proc/{rootPid}"))
+            if (withWinsock is int ready)
             {
-                Thread.Sleep(200);
-                foreach (var pid in EnumeratePids())
-                {
-                    if (CommandLineMentions(pid, fileName) && MapsContain(pid, exePath, fileName))
-                        return pid;
-                }
+                WaitStatus = $"patching pid {ready}";
+                return ready;
+            }
 
-                throw new InvalidOperationException(
-                    $"Wine/Proton exited before {fileName} started. Check skyfire-launch.log.");
+            // Process is clearly Wow (comm/cmdline) — patch after a short settle.
+            if (anyClient is int earlyPid &&
+                DateTime.UtcNow - firstSeen > TimeSpan.FromSeconds(5))
+            {
+                WaitStatus = $"patching pid {earlyPid}";
+                return earlyPid;
+            }
+
+            if (DateTime.UtcNow - lastNote > TimeSpan.FromSeconds(2))
+            {
+                lastNote = DateTime.UtcNow;
+                WaitStatus = sawClient
+                    ? $"found {fileName}, waiting briefly for ws2_32"
+                    : $"waiting for {fileName} (comm/cmdline/maps)";
             }
 
             Thread.Sleep(50);
         }
 
+        foreach (var pid in EnumerateCandidateClientPids(rootPid))
+        {
+            if (!IsClientProcess(pid, exePath))
+                continue;
+
+            WaitStatus = $"patching pid {pid} (timeout fallback)";
+            return pid;
+        }
+
         throw new InvalidOperationException(
-            $"Timed out waiting for {fileName} to start. Check display/Vulkan and skyfire-launch.log.");
+            $"Timed out waiting for {fileName}. If it is in the process list with no window, " +
+            "graphics failed to start — check skyfire-launch.log and use GE-Proton (not *-slr).");
+    }
+
+    public static bool IsClientProcess(int pid, string exePath)
+    {
+        var fileName = Path.GetFileName(exePath);
+        return CommEquals(pid, fileName)
+               || CommandLineMentions(pid, fileName)
+               || MapsContain(pid, exePath, fileName);
     }
 
     public static bool CommandLineMentions(int pid, string token)
@@ -218,6 +269,24 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
 
             var cmdline = raw.Replace('\0', ' ');
             return cmdline.Contains(token, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool CommEquals(int pid, string fileName)
+    {
+        try
+        {
+            var comm = File.ReadAllText($"/proc/{pid}/comm").Trim();
+            if (comm.Equals(fileName, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // TASK_COMM_LEN is 16 bytes including NUL — long names are truncated.
+            return fileName.Length >= 15 &&
+                   fileName.StartsWith(comm, StringComparison.OrdinalIgnoreCase);
         }
         catch
         {
@@ -277,8 +346,13 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
             if (string.IsNullOrEmpty(map.Path))
                 continue;
 
-            var mapFileName = Path.GetFileName(map.Path.Replace('\\', '/'));
+            var normalized = map.Path.Replace('\\', '/');
+            if (normalized.EndsWith(" (deleted)", StringComparison.OrdinalIgnoreCase))
+                normalized = normalized[..^" (deleted)".Length];
+
+            var mapFileName = Path.GetFileName(normalized);
             var isMatch = map.Path.Equals(exePath, StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals(exePath, StringComparison.OrdinalIgnoreCase)
                 || mapFileName.Equals(fileName, StringComparison.OrdinalIgnoreCase);
             if (!isMatch)
                 continue;
@@ -688,8 +762,14 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
                 if (string.IsNullOrEmpty(map.Path))
                     continue;
 
-                var mapFileName = Path.GetFileName(map.Path.Replace('\\', '/'));
+                // Wine may show "…/Wow-64.exe (deleted)" after replace/unlink.
+                var normalized = map.Path.Replace('\\', '/');
+                if (normalized.EndsWith(" (deleted)", StringComparison.OrdinalIgnoreCase))
+                    normalized = normalized[..^" (deleted)".Length];
+
+                var mapFileName = Path.GetFileName(normalized);
                 if (map.Path.Equals(exePath, StringComparison.OrdinalIgnoreCase)
+                    || normalized.Equals(exePath, StringComparison.OrdinalIgnoreCase)
                     || mapFileName.Equals(fileName, StringComparison.OrdinalIgnoreCase))
                     return true;
             }
