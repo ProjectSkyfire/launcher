@@ -104,6 +104,7 @@ public static class LinuxClientRuntime
 
         var prefix = ResolvePrefix(protonPrefixPath);
         Directory.CreateDirectory(prefix);
+        StopPrefixWineServer(prefix);
         if (!TryEnsureProtonGraphicsStack(protonInstallPath, prefix))
         {
             throw new InvalidOperationException(
@@ -200,6 +201,7 @@ public static class LinuxClientRuntime
     {
         var prefix = ResolvePrefix(protonPrefixPath);
         Directory.CreateDirectory(prefix);
+        StopPrefixWineServer(prefix);
 
         var umu = FindOnPath("umu-run") ?? FindOnPath("umu");
         var hasDxvk = TryEnsureProtonGraphicsStack(proton.InstallPath, prefix);
@@ -253,6 +255,10 @@ public static class LinuxClientRuntime
         startInfo.Environment["PROTONPATH"] = protonInstallPath;
         // Wow 5.4.8 is D3D9; force DXVK instead of wined3d/vkd3d.
         startInfo.Environment["PROTON_USE_WINED3D"] = "0";
+        // Match Proton's default sync so a leftover wineserver from a prior
+        // launch does not reject children with WINEFSYNC mismatches.
+        startInfo.Environment["WINEFSYNC"] = "1";
+        startInfo.Environment["WINEESYNC"] = "1";
         MergeWineDllOverrides(startInfo, "d3d9,d3d11,d3d10core,dxgi=n");
 
         var steamRoot = FindSteamRoot() ?? EnsureSteamClientStub(prefix);
@@ -285,32 +291,112 @@ public static class LinuxClientRuntime
             if (!string.IsNullOrEmpty(dir))
                 Directory.CreateDirectory(dir);
 
-            var writer = new StreamWriter(new FileStream(logPath, FileMode.Create, FileAccess.Write, FileShare.Read))
+            var gate = new object();
+            StreamWriter? writer = new StreamWriter(
+                new FileStream(logPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
             {
                 AutoFlush = true
             };
-            hostProcess.OutputDataReceived += (_, e) =>
+
+            void WriteLine(string? line)
             {
-                if (e.Data is not null)
-                    lock (writer) writer.WriteLine(e.Data);
-            };
-            hostProcess.ErrorDataReceived += (_, e) =>
+                if (line is null)
+                    return;
+
+                lock (gate)
+                {
+                    try
+                    {
+                        writer?.WriteLine(line);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // Process exited and drained remaining output after dispose.
+                    }
+                    catch (IOException)
+                    {
+                        // Best-effort logging only.
+                    }
+                }
+            }
+
+            void CloseWriter()
             {
-                if (e.Data is not null)
-                    lock (writer) writer.WriteLine(e.Data);
+                lock (gate)
+                {
+                    try { writer?.Dispose(); } catch { /* ignore */ }
+                    writer = null;
+                }
+            }
+
+            hostProcess.OutputDataReceived += (_, e) => WriteLine(e.Data);
+            hostProcess.ErrorDataReceived += (_, e) => WriteLine(e.Data);
+            hostProcess.EnableRaisingEvents = true;
+            hostProcess.Exited += (_, _) =>
+            {
+                // Let AsyncStreamReader finish flushing before closing the file.
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    Thread.Sleep(250);
+                    CloseWriter();
+                });
             };
             hostProcess.BeginOutputReadLine();
             hostProcess.BeginErrorReadLine();
-            hostProcess.Exited += (_, _) =>
-            {
-                try { lock (writer) writer.Dispose(); } catch { /* ignore */ }
-            };
-            hostProcess.EnableRaisingEvents = true;
         }
         catch
         {
             // Logging is best-effort; launching still proceeds.
         }
+    }
+
+    private static void StopPrefixWineServer(string compatDataPath, string? protonInstallPath = null)
+    {
+        // A crashed prior launch can leave wineserver running with different
+        // WINEFSYNC/WINEESYNC flags; new children then abort immediately.
+        var winePrefix = Path.Combine(compatDataPath, "pfx");
+        if (!Directory.Exists(winePrefix))
+            return;
+
+        try
+        {
+            var wineserver = FindProtonWineServer(protonInstallPath) ?? FindOnPath("wineserver");
+            if (wineserver is null)
+                return;
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = wineserver,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            startInfo.ArgumentList.Add("-k");
+            startInfo.Environment["WINEPREFIX"] = winePrefix;
+
+            using var process = Process.Start(startInfo);
+            process?.WaitForExit(3000);
+        }
+        catch
+        {
+            // Best-effort cleanup only.
+        }
+    }
+
+    private static string? FindProtonWineServer(string? protonInstallPath)
+    {
+        if (string.IsNullOrWhiteSpace(protonInstallPath) || protonInstallPath is "GE-Proton")
+            return null;
+
+        foreach (var rel in new[] { "files/bin/wineserver", "dist/bin/wineserver" })
+        {
+            var candidate = Path.Combine(protonInstallPath, rel);
+            if (File.Exists(candidate))
+                return candidate;
+        }
+
+        return null;
     }
 
     private static void MergeWineDllOverrides(ProcessStartInfo startInfo, string addition)
