@@ -24,4 +24,8 @@
     <Resource Include="Fonts\*.otf" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\SkyFireLauncher.Core\SkyFireLauncher.Core.csproj" />
+  </ItemGroup>
+
 </Project>

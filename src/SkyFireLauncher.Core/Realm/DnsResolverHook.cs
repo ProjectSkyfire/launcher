@@ -1,6 +1,4 @@
-using System.ComponentModel;
 using System.Net;
-using System.Runtime.InteropServices;
 using System.Text;
 
 namespace SkyFireLauncher.Realm;
@@ -17,7 +15,7 @@ namespace SkyFireLauncher.Realm;
 // for gethostbyname to point at that shellcode instead of the real function.
 public static class DnsResolverHook
 {
-    public static void Install(IntPtr hProcess, IntPtr baseAddress, byte[] moduleBuffer, bool is64Bit, string targetAddress)
+    internal static void Install(IRemoteProcess process, nint baseAddress, byte[] moduleBuffer, bool is64Bit, string targetAddress)
     {
         // gethostbyname is ordinal 52 in ws2_32.dll - stable/documented since
         // Windows 95, and how this client actually imports it (by ordinal,
@@ -33,37 +31,21 @@ public static class DnsResolverHook
 
         var block = BuildFakeHostentBlock(is64Bit, ipBytes, targetAddress, out var shellcodeOffset);
 
-        var allocSize = (UIntPtr)block.Length;
-        var allocBase = VirtualAllocEx(hProcess, IntPtr.Zero, allocSize, AllocationType.MEM_COMMIT | AllocationType.MEM_RESERVE, MemoryProtection.PAGE_EXECUTE_READWRITE);
-        if (allocBase == IntPtr.Zero)
-            throw new Win32Exception("Could not allocate memory in the client process");
+        var allocBase = process.AllocateExecutable(block.Length, prefer32BitAddress: !is64Bit);
 
         // Now that we know the allocation's address, fix up the shellcode's
         // embedded pointer and the hostent's internal pointers, then write
         // the finished block in one shot.
         PatchBlockPointers(block, allocBase, is64Bit, shellcodeOffset);
+        process.Write(allocBase, block);
 
-        if (!WriteProcessMemory(hProcess, allocBase, block, block.Length, out _))
-            throw new Win32Exception("Could not write the resolver hook into client memory");
-
-        var iatSlotAddress = IntPtr.Add(baseAddress, iatSlotRva);
-        var shellcodeAddress = IntPtr.Add(allocBase, shellcodeOffset);
+        var iatSlotAddress = nint.Add(baseAddress, iatSlotRva);
+        var shellcodeAddress = nint.Add(allocBase, shellcodeOffset);
         var pointerBytes = is64Bit
-            ? BitConverter.GetBytes(shellcodeAddress.ToInt64())
-            : BitConverter.GetBytes((uint)shellcodeAddress.ToInt64());
+            ? BitConverter.GetBytes((long)shellcodeAddress)
+            : BitConverter.GetBytes((uint)(long)shellcodeAddress);
 
-        if (!VirtualProtectEx(hProcess, iatSlotAddress, (UIntPtr)pointerBytes.Length, MemoryProtection.PAGE_READWRITE, out var oldProtect))
-            throw new Win32Exception("Could not unprotect the client's import table");
-
-        try
-        {
-            if (!WriteProcessMemory(hProcess, iatSlotAddress, pointerBytes, pointerBytes.Length, out _))
-                throw new Win32Exception("Could not redirect the client's DNS resolver import");
-        }
-        finally
-        {
-            VirtualProtectEx(hProcess, iatSlotAddress, (UIntPtr)pointerBytes.Length, oldProtect, out _);
-        }
+        process.Write(iatSlotAddress, pointerBytes);
     }
 
     // Layout: [shellcode][hostent][addrList: 2 pointers][ip bytes: 4][name string]
@@ -93,7 +75,7 @@ public static class DnsResolverHook
         return block;
     }
 
-    private static void PatchBlockPointers(byte[] block, IntPtr allocBase, bool is64Bit, int shellcodeOffset)
+    private static void PatchBlockPointers(byte[] block, nint allocBase, bool is64Bit, int shellcodeOffset)
     {
         var ptrSize = is64Bit ? 8 : 4;
         var hostentSize = is64Bit ? 32 : 16;
@@ -104,7 +86,7 @@ public static class DnsResolverHook
         var ipBytesOffset = addrListOffset + 2 * ptrSize;
         var nameOffset = ipBytesOffset + 4;
 
-        long Abs(int offset) => is64Bit ? allocBase.ToInt64() + offset : (uint)(allocBase.ToInt64() + offset);
+        long Abs(int offset) => is64Bit ? (long)allocBase + offset : (uint)((long)allocBase + offset);
 
         // struct hostent { char *h_name; char **h_aliases; short h_addrtype;
         //                  short h_length; char **h_addr_list; };
@@ -156,30 +138,4 @@ public static class DnsResolverHook
     private static void WriteInt16(byte[] block, int offset, short value) => BitConverter.GetBytes(value).CopyTo(block, offset);
 
     private static int Align(int value, int alignment) => (value + alignment - 1) / alignment * alignment;
-
-    #region Win32 interop
-
-    [Flags]
-    private enum AllocationType : uint
-    {
-        MEM_COMMIT = 0x1000,
-        MEM_RESERVE = 0x2000
-    }
-
-    private enum MemoryProtection : uint
-    {
-        PAGE_READWRITE = 0x04,
-        PAGE_EXECUTE_READWRITE = 0x40
-    }
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr VirtualAllocEx(IntPtr hProcess, IntPtr lpAddress, UIntPtr dwSize, AllocationType flAllocationType, MemoryProtection flProtect);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool WriteProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] lpBuffer, int dwSize, out IntPtr lpNumberOfBytesWritten);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool VirtualProtectEx(IntPtr hProcess, IntPtr lpAddress, UIntPtr dwSize, MemoryProtection flNewProtect, out MemoryProtection lpflOldProtect);
-
-    #endregion
 }

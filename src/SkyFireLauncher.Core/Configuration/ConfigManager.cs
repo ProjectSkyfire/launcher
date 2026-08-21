@@ -13,6 +13,7 @@ public class ConfigManager
     {
         // Program Files (where the installer puts the exe) isn't writable by
         // standard users - keep the config in the per-user app data folder instead.
+        // On Linux this is $XDG_CONFIG_HOME or ~/.config.
         var appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SkyFireLauncher");
         Directory.CreateDirectory(appDataDir);
         _configPath = Path.Combine(appDataDir, "config.json");

@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SkyFireLauncher</AssemblyName>
+    <RootNamespace>SkyFireLauncher</RootNamespace>
+    <ApplicationTitle>SkyFire Launcher</ApplicationTitle>
+    <ApplicationIcon>..\SkyFireLauncher\AppIcon.ico</ApplicationIcon>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+
+    <BaseOutputPath>..\..\Build\linux\</BaseOutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.14" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.14" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.14" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SkyFireLauncher.Core\SkyFireLauncher.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="..\SkyFireLauncher\AppIcon.ico" Link="AppIcon.ico" />
+    <AvaloniaResource Include="..\SkyFireLauncher\Assets\skyfire-launcher-logo.png" Link="Assets\skyfire-launcher-logo.png" />
+    <AvaloniaResource Include="..\SkyFireLauncher\Fonts\*.ttf" Link="Fonts\%(Filename)%(Extension)" />
+    <AvaloniaResource Include="..\SkyFireLauncher\Fonts\*.otf" Link="Fonts\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

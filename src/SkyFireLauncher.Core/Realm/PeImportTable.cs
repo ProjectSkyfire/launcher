@@ -27,6 +27,13 @@ public static class PeImportTable
         return machine == 0x8664; // IMAGE_FILE_MACHINE_AMD64
     }
 
+    public static int GetSizeOfImage(byte[] module)
+    {
+        var e_lfanew = ReadInt32(module, 0x3C);
+        var optionalHeaderStart = e_lfanew + 24;
+        return ReadInt32(module, optionalHeaderStart + 56);
+    }
+
     public static int FindIatSlotRva(byte[] module, string dllName, string functionName, int knownOrdinal = 0)
     {
         var e_lfanew = ReadInt32(module, 0x3C);

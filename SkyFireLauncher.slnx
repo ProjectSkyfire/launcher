@@ -1,5 +1,7 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/SkyFireLauncher.Core/SkyFireLauncher.Core.csproj" />
     <Project Path="src/SkyFireLauncher/SkyFireLauncher.csproj" />
+    <Project Path="src/SkyFireLauncher.Linux/SkyFireLauncher.Linux.csproj" />
   </Folder>
 </Solution>

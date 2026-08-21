@@ -1,0 +1,425 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SkyFireLauncher.MainWindow"
+        Title="SkyFire Launcher"
+        Height="560" Width="760"
+        MinHeight="480" MinWidth="640"
+        Icon="/AppIcon.ico"
+        WindowStartupLocation="CenterScreen"
+        SystemDecorations="None"
+        CanResize="True"
+        Background="{StaticResource BgDeepBrush}">
+
+    <Border BorderBrush="{StaticResource FrameBorderBrush}" BorderThickness="1.5">
+        <Grid>
+            <Rectangle Fill="{StaticResource AtmosphereBrush}" IsHitTestVisible="False"/>
+            <Rectangle Fill="{StaticResource EmberGlowBrush}" IsHitTestVisible="False"/>
+            <Rectangle Fill="{StaticResource IceGlowBrush}" IsHitTestVisible="False"/>
+            <Rectangle IsHitTestVisible="False">
+                <Rectangle.Fill>
+                    <RadialGradientBrush Center="0.5,0.45" RadiusX="0.75" RadiusY="0.7" GradientOrigin="0.5,0.4">
+                        <GradientStop Color="#00070B14" Offset="0.55"/>
+                        <GradientStop Color="#CC070B14" Offset="1"/>
+                    </RadialGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="40"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Background="#66000000" PointerPressed="TitleBar_PointerPressed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
+                        <TextBlock Text="PROJECT SKYFIRE"
+                                   FontFamily="{StaticResource DisplayFont}"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource GoldBrush}"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="  ·  LAUNCHER"
+                                   FontFamily="{StaticResource BodyFont}"
+                                   FontSize="11"
+                                   Foreground="{StaticResource MutedBrush}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,6,0">
+                        <Button x:Name="SettingsOpenButton"
+                                Classes="chrome-icon"
+                                Content="⚙"
+                                ToolTip.Tip="Configuration"
+                                Click="SettingsOpenButton_Click"/>
+                        <Button Classes="chrome-icon"
+                                Content="—"
+                                ToolTip.Tip="Minimize"
+                                Click="MinimizeButton_Click"/>
+                        <Button Classes="close-icon"
+                                Content="✕"
+                                ToolTip.Tip="Close"
+                                Click="CloseButton_Click"/>
+                    </StackPanel>
+                </Grid>
+
+                <Grid x:Name="LaunchPane" Grid.Row="1" Margin="28,8,28,24">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Image Grid.Row="0"
+                           Source="/Assets/skyfire-launcher-logo.png"
+                           Stretch="Uniform"
+                           MaxHeight="300"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           RenderOptions.BitmapInterpolationMode="HighQuality"/>
+
+                    <Border Grid.Row="1"
+                            Background="#99121826"
+                            BorderBrush="#402A3548"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="20,16"
+                            Margin="40,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="CLIENT VERSION"
+                                           Classes="field-label"
+                                           FontFamily="{StaticResource DisplayFont}"
+                                           FontSize="11"
+                                           Foreground="{StaticResource IceBrush}"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <RadioButton x:Name="LaunchVersion32RadioButton"
+                                                 Content="32-bit"
+                                                 GroupName="LaunchVersion"
+                                                 Classes="version"/>
+                                    <RadioButton x:Name="LaunchVersion64RadioButton"
+                                                 Content="64-bit"
+                                                 GroupName="LaunchVersion"
+                                                 Classes="version"/>
+                                </StackPanel>
+                                <TextBlock x:Name="LaunchStatusTextBlock"
+                                           Text="Ready to enter Azeroth."
+                                           FontFamily="{StaticResource BodyFont}"
+                                           FontSize="12"
+                                           Foreground="{StaticResource MutedBrush}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+
+                            <Button x:Name="LaunchButton"
+                                    Grid.Column="1"
+                                    Content="PLAY"
+                                    Classes="play"
+                                    VerticalAlignment="Center"
+                                    Margin="24,0,0,0"
+                                    Click="LaunchButton_Click"/>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <Grid x:Name="SettingsPane"
+                      Grid.Row="1"
+                      IsVisible="False"
+                      Opacity="0">
+                    <Grid.Transitions>
+                        <Transitions>
+                            <DoubleTransition Property="Opacity" Duration="0:0:0.18"/>
+                        </Transitions>
+                    </Grid.Transitions>
+                    <Grid.RenderTransform>
+                        <TranslateTransform Y="18"/>
+                    </Grid.RenderTransform>
+
+                    <Border Background="#E6070B14"/>
+
+                    <Border Background="{StaticResource BgPanelBrush}"
+                            BorderBrush="{StaticResource FrameBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="28,24"
+                            MaxWidth="520"
+                            MaxHeight="520"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Margin="24">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0" Margin="0,0,0,8">
+                                <TextBlock Text="Configuration" Classes="section-title" Margin="0"/>
+                                <Button HorizontalAlignment="Right"
+                                        Classes="chrome-icon"
+                                        Content="✕"
+                                        ToolTip.Tip="Back"
+                                        Click="SettingsCloseButton_Click"/>
+                            </Grid>
+
+                            <ScrollViewer Grid.Row="1" Margin="0,8,0,16">
+                            <StackPanel>
+                                <TextBlock Text="Client Location" Classes="field-label"/>
+                                <Grid Margin="0,0,0,16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="ClientLocationTextBox"
+                                             Classes="launcher"
+                                             Margin="0,0,10,0"/>
+                                    <Button x:Name="BrowseButton"
+                                            Grid.Column="1"
+                                            Content="Browse…"
+                                            Classes="secondary"
+                                            Click="BrowseButton_Click"/>
+                                </Grid>
+
+                                <TextBlock Text="Default Version" Classes="field-label"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                    <RadioButton x:Name="Version32RadioButton"
+                                                 Content="32-bit"
+                                                 GroupName="ConfigVersion"
+                                                 Classes="version"/>
+                                    <RadioButton x:Name="Version64RadioButton"
+                                                 Content="64-bit"
+                                                 GroupName="ConfigVersion"
+                                                 Classes="version"/>
+                                </StackPanel>
+
+                                <TextBlock Text="Login Address" Classes="field-label"/>
+                                <TextBox x:Name="LoginAddressTextBox"
+                                         Classes="launcher"
+                                         Margin="0,0,0,16"/>
+
+                                <TextBlock Text="Compatibility" Classes="field-label"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                    <RadioButton x:Name="RuntimeProtonRadioButton"
+                                                 Content="Proton"
+                                                 GroupName="LinuxRuntime"
+                                                 Classes="version"
+                                                 IsChecked="True"
+                                                 Click="RuntimeRadio_Click"/>
+                                    <RadioButton x:Name="RuntimeWineRadioButton"
+                                                 Content="Wine"
+                                                 GroupName="LinuxRuntime"
+                                                 Classes="version"
+                                                 Click="RuntimeRadio_Click"/>
+                                </StackPanel>
+
+                                <StackPanel x:Name="ProtonOptionsPanel">
+                                    <TextBlock Text="Proton Version" Classes="field-label"/>
+                                    <ComboBox x:Name="ProtonVersionCombo"
+                                              Classes="launcher"
+                                              Margin="0,0,0,6"
+                                              PlaceholderText="No Proton install found"/>
+                                    <TextBlock x:Name="ProtonStatusTextBlock"
+                                               FontFamily="{StaticResource BodyFont}"
+                                               FontSize="11"
+                                               Foreground="{StaticResource MutedBrush}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,0,16"/>
+
+                                    <TextBlock Text="Proton Prefix" Classes="field-label"/>
+                                    <Grid Margin="0,0,0,16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="ProtonPrefixTextBox"
+                                                 Classes="launcher"
+                                                 Watermark="Launcher default"
+                                                 Margin="0,0,10,0"/>
+                                        <Button x:Name="BrowsePrefixButton"
+                                                Grid.Column="1"
+                                                Content="Browse…"
+                                                Classes="secondary"
+                                                Click="BrowsePrefixButton_Click"/>
+                                    </Grid>
+                                </StackPanel>
+
+                                <CheckBox x:Name="ClearCacheOnLoginCheckBox"
+                                          Content="Clear client cache on each login"
+                                          Classes="launcher"
+                                          Margin="0,0,0,10"/>
+
+                                <CheckBox x:Name="EnableAuthnetLoginCheckBox"
+                                          Content="Enable authnet (Battle.net-style) login [experimental]"
+                                          Classes="launcher"
+                                          Margin="0,0,0,16"/>
+
+                                <Button x:Name="MigrateOpenButton"
+                                        Content="Migrate Account to Email Login…"
+                                        Classes="secondary"
+                                        HorizontalAlignment="Left"
+                                        Click="MigrateOpenButton_Click"/>
+                            </StackPanel>
+                            </ScrollViewer>
+
+                            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="Back"
+                                        Classes="secondary"
+                                        Margin="0,0,10,0"
+                                        Click="SettingsCloseButton_Click"/>
+                                <Button x:Name="SaveButton"
+                                        Content="Save"
+                                        Classes="secondary"
+                                        BorderBrush="{StaticResource EmberHotBrush}"
+                                        Click="SaveButton_Click"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <Grid x:Name="MigratePane"
+                      Grid.Row="1"
+                      IsVisible="False"
+                      Opacity="0">
+                    <Grid.Transitions>
+                        <Transitions>
+                            <DoubleTransition Property="Opacity" Duration="0:0:0.18"/>
+                        </Transitions>
+                    </Grid.Transitions>
+                    <Grid.RenderTransform>
+                        <TranslateTransform Y="18"/>
+                    </Grid.RenderTransform>
+
+                    <Border Background="#E6070B14"/>
+
+                    <Border Background="{StaticResource BgPanelBrush}"
+                            BorderBrush="{StaticResource FrameBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="28,24"
+                            MaxWidth="520"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Margin="24">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0" Margin="0,0,0,8">
+                                <TextBlock Text="Migrate Account" Classes="section-title" Margin="0"/>
+                                <Button HorizontalAlignment="Right"
+                                        Classes="chrome-icon"
+                                        Content="✕"
+                                        ToolTip.Tip="Back"
+                                        Click="MigrateCloseButton_Click"/>
+                            </Grid>
+
+                            <StackPanel Grid.Row="1" Margin="0,8,0,16">
+                                <TextBlock Text="Converts a legacy username account to email login. You will use the email and new password to log in afterward."
+                                           FontFamily="{StaticResource BodyFont}"
+                                           FontSize="12"
+                                           Foreground="{StaticResource MutedBrush}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,0,0,16"/>
+
+                                <TextBlock Text="Username" Classes="field-label"/>
+                                <TextBox x:Name="MigrateUsernameTextBox"
+                                         Classes="launcher"
+                                         Margin="0,0,0,16"/>
+
+                                <TextBlock Text="Current Password" Classes="field-label"/>
+                                <TextBox x:Name="MigrateOldPasswordBox"
+                                         Classes="launcher"
+                                         PasswordChar="•"
+                                         Margin="0,0,0,16"/>
+
+                                <TextBlock Text="New Email" Classes="field-label"/>
+                                <TextBox x:Name="MigrateEmailTextBox"
+                                         Classes="launcher"
+                                         Margin="0,0,0,16"/>
+
+                                <TextBlock Text="New Password" Classes="field-label"/>
+                                <TextBox x:Name="MigrateNewPasswordBox"
+                                         Classes="launcher"
+                                         PasswordChar="•"
+                                         Margin="0,0,0,16"/>
+
+                                <TextBlock Text="Confirm New Password" Classes="field-label"/>
+                                <TextBox x:Name="MigrateConfirmPasswordBox"
+                                         Classes="launcher"
+                                         PasswordChar="•"
+                                         Margin="0,0,0,16"/>
+
+                                <TextBlock x:Name="MigrateStatusTextBlock"
+                                           FontFamily="{StaticResource BodyFont}"
+                                           FontSize="12"
+                                           Foreground="{StaticResource MutedBrush}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="Back"
+                                        Classes="secondary"
+                                        Margin="0,0,10,0"
+                                        Click="MigrateCloseButton_Click"/>
+                                <Button x:Name="MigrateSubmitButton"
+                                        Content="Migrate"
+                                        Classes="secondary"
+                                        BorderBrush="{StaticResource EmberHotBrush}"
+                                        Click="MigrateSubmitButton_Click"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <Grid x:Name="NoticePane"
+                      Grid.Row="1"
+                      IsVisible="False"
+                      Opacity="0">
+                    <Border Background="#E6070B14"/>
+                    <Border Background="{StaticResource BgPanelBrush}"
+                            BorderBrush="{StaticResource FrameBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="28,24"
+                            MaxWidth="420"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Margin="24">
+                        <StackPanel>
+                            <TextBlock x:Name="NoticeTitleTextBlock"
+                                       Classes="section-title"
+                                       Margin="0,0,0,12"/>
+                            <TextBlock x:Name="NoticeMessageTextBlock"
+                                       FontFamily="{StaticResource BodyFont}"
+                                       FontSize="13"
+                                       Foreground="{StaticResource TextBrush}"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,20"/>
+                            <Button Content="OK"
+                                    Classes="secondary"
+                                    HorizontalAlignment="Right"
+                                    BorderBrush="{StaticResource EmberHotBrush}"
+                                    Click="NoticeOkButton_Click"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Grid>
+
+            <Border Height="6" VerticalAlignment="Top" Cursor="SizeNorthSouth" PointerPressed="ResizeNorth"/>
+            <Border Height="6" VerticalAlignment="Bottom" Cursor="SizeNorthSouth" PointerPressed="ResizeSouth"/>
+            <Border Width="6" HorizontalAlignment="Left" Cursor="SizeWestEast" PointerPressed="ResizeWest"/>
+            <Border Width="6" HorizontalAlignment="Right" Cursor="SizeWestEast" PointerPressed="ResizeEast"/>
+        </Grid>
+    </Border>
+</Window>

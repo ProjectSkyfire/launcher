@@ -1,0 +1,327 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SkyFireLauncher.App"
+             RequestedThemeVariant="Dark">
+    <Application.Resources>
+        <SolidColorBrush x:Key="BgDeepBrush" Color="#070B14"/>
+        <SolidColorBrush x:Key="BgPanelBrush" Color="#121826"/>
+        <SolidColorBrush x:Key="BgPanelElevatedBrush" Color="#1A2233"/>
+        <SolidColorBrush x:Key="EmberBrush" Color="#C45A1A"/>
+        <SolidColorBrush x:Key="EmberHotBrush" Color="#E87828"/>
+        <SolidColorBrush x:Key="GoldBrush" Color="#F5D76E"/>
+        <SolidColorBrush x:Key="IceBrush" Color="#6EA8E0"/>
+        <SolidColorBrush x:Key="IceDeepBrush" Color="#1E4A9A"/>
+        <SolidColorBrush x:Key="TextBrush" Color="#E8EEF7"/>
+        <SolidColorBrush x:Key="MutedBrush" Color="#8B97AB"/>
+        <SolidColorBrush x:Key="DangerBrush" Color="#C43B2F"/>
+        <SolidColorBrush x:Key="BorderBrushKey" Color="#2A3548"/>
+        <SolidColorBrush x:Key="InputBgBrush" Color="#0C121E"/>
+
+        <FontFamily x:Key="DisplayFont">avares://SkyFireLauncher/Fonts/Cinzel-Regular.ttf#Cinzel</FontFamily>
+        <FontFamily x:Key="BodyFont">avares://SkyFireLauncher/Fonts/SourceSans3-Regular.otf#Source Sans 3</FontFamily>
+
+        <LinearGradientBrush x:Key="AtmosphereBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#1A0A08" Offset="0"/>
+            <GradientStop Color="#070B14" Offset="0.42"/>
+            <GradientStop Color="#081428" Offset="0.72"/>
+            <GradientStop Color="#0A1A3A" Offset="1"/>
+        </LinearGradientBrush>
+
+        <RadialGradientBrush x:Key="EmberGlowBrush" Center="0.2,0.85" RadiusX="0.55" RadiusY="0.45" GradientOrigin="0.15,0.9">
+            <GradientStop Color="#66C45A1A" Offset="0"/>
+            <GradientStop Color="#00C45A1A" Offset="1"/>
+        </RadialGradientBrush>
+
+        <RadialGradientBrush x:Key="IceGlowBrush" Center="0.85,0.15" RadiusX="0.5" RadiusY="0.45" GradientOrigin="0.9,0.1">
+            <GradientStop Color="#446EA8E0" Offset="0"/>
+            <GradientStop Color="#006EA8E0" Offset="1"/>
+        </RadialGradientBrush>
+
+        <LinearGradientBrush x:Key="PlayButtonBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#F0A03A" Offset="0"/>
+            <GradientStop Color="#C45A1A" Offset="0.55"/>
+            <GradientStop Color="#8A3510" Offset="1"/>
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="PlayButtonHoverBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#FFC45A" Offset="0"/>
+            <GradientStop Color="#E87828" Offset="0.5"/>
+            <GradientStop Color="#C45A1A" Offset="1"/>
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="FrameBorderBrush" StartPoint="0,0" EndPoint="1,0">
+            <GradientStop Color="#C45A1A" Offset="0"/>
+            <GradientStop Color="#F5D76E" Offset="0.5"/>
+            <GradientStop Color="#6EA8E0" Offset="1"/>
+        </LinearGradientBrush>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+
+        <Style Selector="Button.chrome-icon">
+            <Setter Property="Width" Value="36"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontFamily" Value="{StaticResource BodyFont}"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="Bd" Background="{TemplateBinding Background}" CornerRadius="3">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Button.chrome-icon:pointerover /template/ Border#Bd">
+            <Setter Property="Background" Value="#22FFFFFF"/>
+        </Style>
+        <Style Selector="Button.chrome-icon:pointerover">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        </Style>
+        <Style Selector="Button.chrome-icon:pressed /template/ Border#Bd">
+            <Setter Property="Background" Value="#33FFFFFF"/>
+        </Style>
+
+        <Style Selector="Button.close-icon">
+            <Setter Property="Width" Value="36"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontFamily" Value="{StaticResource BodyFont}"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="Bd" Background="{TemplateBinding Background}" CornerRadius="3">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Button.close-icon:pointerover /template/ Border#Bd">
+            <Setter Property="Background" Value="#C43B2F"/>
+        </Style>
+        <Style Selector="Button.close-icon:pointerover">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <Style Selector="Button.close-icon:pressed /template/ Border#Bd">
+            <Setter Property="Background" Value="#A32F25"/>
+        </Style>
+        <Style Selector="Button.close-icon:pressed">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+
+        <Style Selector="Button.secondary">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="MinWidth" Value="96"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontFamily" Value="{StaticResource BodyFont}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="{StaticResource BgPanelElevatedBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource IceDeepBrush}"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="3"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Button.secondary:pointerover /template/ Border#Bd">
+            <Setter Property="BorderBrush" Value="{StaticResource IceBrush}"/>
+            <Setter Property="Background" Value="#243044"/>
+        </Style>
+        <Style Selector="Button.secondary:pressed /template/ Border#Bd">
+            <Setter Property="Background" Value="#1A2436"/>
+        </Style>
+
+        <Style Selector="Button.play">
+            <Setter Property="Height" Value="52"/>
+            <Setter Property="MinWidth" Value="180"/>
+            <Setter Property="Foreground" Value="#1A0C04"/>
+            <Setter Property="FontFamily" Value="{StaticResource DisplayFont}"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Grid>
+                        <Border Name="Glow"
+                                CornerRadius="4"
+                                Margin="-4"
+                                Opacity="0.55"
+                                Background="{StaticResource EmberHotBrush}"
+                                BoxShadow="0 0 16 4 #88E87828"/>
+                        <Border Name="Bd"
+                                Background="{StaticResource PlayButtonBrush}"
+                                BorderBrush="{StaticResource GoldBrush}"
+                                BorderThickness="1.5"
+                                CornerRadius="4"
+                                Padding="28,0">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Button.play:pointerover /template/ Border#Bd">
+            <Setter Property="Background" Value="{StaticResource PlayButtonHoverBrush}"/>
+        </Style>
+        <Style Selector="Button.play:pointerover /template/ Border#Glow">
+            <Setter Property="Opacity" Value="0.85"/>
+        </Style>
+        <Style Selector="Button.play:pressed /template/ Border#Bd">
+            <Setter Property="Background" Value="{StaticResource EmberBrush}"/>
+        </Style>
+        <Style Selector="Button.play /template/ Border#Glow">
+            <Style.Animations>
+                <Animation Duration="0:0:1.6" IterationCount="Infinite" PlaybackDirection="Alternate">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0.35"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="0.7"/>
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <Style Selector="TextBox.launcher">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="CaretBrush" Value="{StaticResource GoldBrush}"/>
+            <Setter Property="Background" Value="{StaticResource InputBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrushKey}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontFamily" Value="{StaticResource BodyFont}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="CornerRadius" Value="3"/>
+        </Style>
+        <Style Selector="TextBox.launcher:focus">
+            <Setter Property="BorderBrush" Value="{StaticResource IceBrush}"/>
+        </Style>
+        <Style Selector="TextBox.launcher:pointerover">
+            <Setter Property="BorderBrush" Value="{StaticResource IceDeepBrush}"/>
+        </Style>
+
+        <Style Selector="ComboBox.launcher">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="MinHeight" Value="34"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="Background" Value="{StaticResource InputBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrushKey}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontFamily" Value="{StaticResource BodyFont}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="PlaceholderForeground" Value="{StaticResource MutedBrush}"/>
+        </Style>
+        <Style Selector="ComboBox.launcher:pointerover">
+            <Setter Property="BorderBrush" Value="{StaticResource IceDeepBrush}"/>
+        </Style>
+        <Style Selector="ComboBox.launcher:focus">
+            <Setter Property="BorderBrush" Value="{StaticResource IceBrush}"/>
+        </Style>
+
+        <Style Selector="TextBlock.field-label">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+            <Setter Property="FontFamily" Value="{StaticResource BodyFont}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
+
+        <Style Selector="TextBlock.section-title">
+            <Setter Property="Foreground" Value="{StaticResource GoldBrush}"/>
+            <Setter Property="FontFamily" Value="{StaticResource DisplayFont}"/>
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,16"/>
+        </Style>
+
+        <Style Selector="RadioButton.version">
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+            <Setter Property="FontFamily" Value="{StaticResource BodyFont}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="Bd"
+                            Background="#181F2E"
+                            BorderBrush="{StaticResource BorderBrushKey}"
+                            BorderThickness="1"
+                            CornerRadius="3"
+                            Padding="14,8"
+                            MinWidth="88">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="RadioButton.version:checked /template/ Border#Bd">
+            <Setter Property="Background" Value="#2A1A10"/>
+            <Setter Property="BorderBrush" Value="{StaticResource EmberHotBrush}"/>
+        </Style>
+        <Style Selector="RadioButton.version:checked">
+            <Setter Property="Foreground" Value="{StaticResource GoldBrush}"/>
+        </Style>
+        <Style Selector="RadioButton.version:pointerover /template/ Border#Bd">
+            <Setter Property="BorderBrush" Value="{StaticResource IceBrush}"/>
+        </Style>
+
+        <Style Selector="CheckBox.launcher">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontFamily" Value="{StaticResource BodyFont}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <StackPanel Orientation="Horizontal">
+                        <Border Name="Box"
+                                Width="16" Height="16"
+                                Background="#181F2E"
+                                BorderBrush="{StaticResource BorderBrushKey}"
+                                BorderThickness="1"
+                                CornerRadius="3"
+                                VerticalAlignment="Center">
+                            <Path Name="Check"
+                                  Data="M2,7 L6,11 L14,3"
+                                  Stroke="{StaticResource GoldBrush}"
+                                  StrokeThickness="2"
+                                  StrokeLineCap="Round"
+                                  StrokeJoin="Round"
+                                  IsVisible="False"/>
+                        </Border>
+                        <ContentPresenter VerticalAlignment="Center" Margin="8,0,0,0"/>
+                    </StackPanel>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="CheckBox.launcher:checked /template/ Border#Box">
+            <Setter Property="Background" Value="#2A1A10"/>
+            <Setter Property="BorderBrush" Value="{StaticResource EmberHotBrush}"/>
+        </Style>
+        <Style Selector="CheckBox.launcher:checked /template/ Path#Check">
+            <Setter Property="IsVisible" Value="True"/>
+        </Style>
+        <Style Selector="CheckBox.launcher:pointerover /template/ Border#Box">
+            <Setter Property="BorderBrush" Value="{StaticResource IceBrush}"/>
+        </Style>
+    </Application.Styles>
+</Application>
