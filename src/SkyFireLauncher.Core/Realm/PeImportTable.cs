@@ -34,6 +34,49 @@ public static class PeImportTable
         return ReadInt32(module, optionalHeaderStart + 56);
     }
 
+    /// <summary>
+    /// Builds a SizeOfImage-sized buffer with PE sections at their RVAs (no
+    /// relocations applied). Safe to search for code/string patterns that are
+    /// valid at load time before fixups — avoids reading the live process image.
+    /// </summary>
+    public static byte[] BuildVirtualImage(byte[] file)
+    {
+        var sizeOfImage = GetSizeOfImage(file);
+        if (sizeOfImage <= 0 || sizeOfImage > 512 * 1024 * 1024)
+            throw new InvalidOperationException("PE SizeOfImage is invalid.");
+
+        var image = new byte[sizeOfImage];
+        var e_lfanew = ReadInt32(file, 0x3C);
+        var fileHeaderStart = e_lfanew + 4;
+        var numberOfSections = ReadUInt16(file, fileHeaderStart + 2);
+        var sizeOfOptionalHeader = ReadUInt16(file, fileHeaderStart + 16);
+        var sizeOfHeaders = ReadInt32(file, e_lfanew + 24 + 60);
+        var headerCopy = Math.Min(Math.Min(sizeOfHeaders, file.Length), sizeOfImage);
+        Buffer.BlockCopy(file, 0, image, 0, headerCopy);
+
+        var sectionTableStart = e_lfanew + 24 + sizeOfOptionalHeader;
+        for (var i = 0; i < numberOfSections; i++)
+        {
+            var entryStart = sectionTableStart + i * 40;
+            var virtualAddress = ReadInt32(file, entryStart + 12);
+            var sizeOfRawData = ReadInt32(file, entryStart + 16);
+            var pointerToRawData = ReadInt32(file, entryStart + 20);
+            if (virtualAddress < 0 || pointerToRawData < 0 || sizeOfRawData <= 0)
+                continue;
+
+            var dest = virtualAddress;
+            var availFile = Math.Max(0, file.Length - pointerToRawData);
+            var availImage = Math.Max(0, sizeOfImage - dest);
+            var copy = Math.Min(sizeOfRawData, Math.Min(availFile, availImage));
+            if (copy <= 0)
+                continue;
+
+            Buffer.BlockCopy(file, pointerToRawData, image, dest, copy);
+        }
+
+        return image;
+    }
+
     public static int FindIatSlotRva(byte[] module, string dllName, string functionName, int knownOrdinal = 0)
     {
         var e_lfanew = ReadInt32(module, 0x3C);

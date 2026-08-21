@@ -123,8 +123,13 @@ public static class ClientProcessLauncher
             // for d3d9 — that blocked forever when graphics had not started yet.
             clientPid = LinuxRemoteProcess.WaitForReadyClient(exePath, hostProcess.Id, timeout);
 
+            LaunchWaitStatus = $"attaching pid {clientPid.Value}";
             using (var process = new LinuxRemoteProcess(clientPid.Value))
             {
+                if (!IsPidAlive(clientPid.Value))
+                    throw new InvalidOperationException("The client exited while attaching (ptrace). Try PLAY again.");
+
+                LaunchWaitStatus = $"patching pid {clientPid.Value}";
                 var fileBuffer = File.ReadAllBytes(exePath);
                 var (baseAddress, moduleSize) = LinuxRemoteProcess.FindPeModule(clientPid.Value, exePath, fileBuffer);
                 ClientImagePatcher.Apply(process, baseAddress, moduleSize, exePath, targetAddress, enableAuthnetLogin);
@@ -139,8 +144,8 @@ public static class ClientProcessLauncher
                     ? $" See {log}."
                     : string.Empty;
                 throw new InvalidOperationException(
-                    "The client exited shortly after launch. " +
-                    "Delete ~/.local/share/SkyFireLauncher/proton, pick GE-Proton (not *-slr), and try again." +
+                    "The client crashed during/after in-memory patching. " +
+                    "Kill leftover wine/Wow processes and try again." +
                     logHint);
             }
 

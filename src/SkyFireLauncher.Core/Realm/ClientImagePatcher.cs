@@ -20,60 +20,52 @@ internal static class ClientImagePatcher
 
     public static void Apply(IRemoteProcess process, nint baseAddress, int moduleSize, string exePath, string targetAddress, bool enableAuthnetLogin)
     {
-        var buffer = process.Read(baseAddress, moduleSize);
+        // Search a reconstructed virtual image from disk. Reading the whole live
+        // SizeOfImage under ptrace (tens of MB) routinely kills Wine/Wow on Linux.
+        var fileBuffer = File.ReadAllBytes(exePath);
+        var searchBuffer = PeImportTable.BuildVirtualImage(fileBuffer);
+        _ = moduleSize;
 
         foreach (var (patternText, replacementFormat) in PatchTargets)
         {
             var pattern = Encoding.ASCII.GetBytes(patternText + '\0');
             var replacement = Encoding.ASCII.GetBytes(string.Format(replacementFormat, targetAddress) + '\0');
-            var offset = 0;
+            if (replacement.Length > pattern.Length)
+                throw new InvalidOperationException($"Replacement for '{patternText}' is longer than the original string.");
 
-            while ((offset = IndexOf(buffer, pattern, offset)) >= 0)
+            // Pad with NULs so we do not leave trailing original hostname bytes.
+            if (replacement.Length < pattern.Length)
+            {
+                var padded = new byte[pattern.Length];
+                Array.Copy(replacement, padded, replacement.Length);
+                replacement = padded;
+            }
+
+            var offset = 0;
+            while ((offset = IndexOf(searchBuffer, pattern, offset)) >= 0)
             {
                 process.Write(nint.Add(baseAddress, offset), replacement);
                 offset += pattern.Length;
             }
         }
 
-        // The actual connect hostname is built at runtime (region code +
-        // a hardcoded suffix), so there's no static string for it to
-        // find-and-replace above. Hook the DNS resolver import instead so
-        // whatever hostname it builds resolves to the target regardless.
-        //
-        // Import-table lookup uses the file on disk, not the live buffer
-        // above: once loaded, the loader overwrites FirstThunk (the IAT)
-        // with resolved addresses, and not every import descriptor keeps
-        // a separate OriginalFirstThunk - reading live memory for this
-        // can end up treating resolved pointers as unresolved RVAs. RVAs
-        // themselves are identical between file and loaded image (ASLR
-        // only changes the base, not internal offsets), so the RVA found
-        // on disk is still correct to apply against the live baseAddress.
-        var fileBuffer = File.ReadAllBytes(exePath);
         var is64Bit = PeImportTable.IsPe64Bit(fileBuffer);
-        DnsResolverHook.Install(process, baseAddress, fileBuffer, is64Bit, targetAddress);
 
-        // This build defaults to routing login through the modern
-        // Battle.net/Agent protocol, which SkyFire's authserver doesn't
-        // speak. These patches force it into the classic realmList-based
-        // connect flow instead, which does match SkyFire's protocol.
-        //
-        // "Email" is the one patch responsible for that: it forces the
-        // client's login-service selector to always build GruntLogin,
-        // even for an email-shaped login that would otherwise route to
-        // BattlenetLogin. Skipping it when authnet login is enabled lets
-        // plain usernames keep working through GRUNT (the "User" patch
-        // still lets those past the client's own email-only UI gate)
-        // while an email address takes the real BattlenetLogin path
-        // toward realmListbn instead.
+        // DNS hook needs remote mmap via ptrace syscall injection, which crashes
+        // Proton/Wine often. Keep it on Windows; on Linux rely on string patches +
+        // Config.wtf realmlist (authnet can revisit a safer hook later).
+        if (!OperatingSystem.IsLinux())
+            DnsResolverHook.Install(process, baseAddress, fileBuffer, is64Bit, targetAddress);
+
         var loginFlowPatches = is64Bit ? LoginFlowPatches.X64 : LoginFlowPatches.X86;
         if (enableAuthnetLogin)
             loginFlowPatches = loginFlowPatches.Where(p => p.Name != "Email").ToArray();
 
         foreach (var (_, pattern, replacement) in loginFlowPatches)
         {
-            var matchOffset = IndexOfWildcard(buffer, pattern, 0);
+            var matchOffset = IndexOfWildcard(searchBuffer, pattern, 0);
             if (matchOffset < 0)
-                continue; // best-effort: skip patches that don't match this exact build
+                continue;
 
             process.Write(nint.Add(baseAddress, matchOffset), replacement);
         }

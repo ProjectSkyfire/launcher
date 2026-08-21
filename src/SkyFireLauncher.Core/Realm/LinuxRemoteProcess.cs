@@ -57,11 +57,21 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
         if (data.Length == 0)
             return;
 
-        // Hostname/login patches live in read-only PE sections. process_vm_writev
-        // and /proc/pid/mem both return EIO/EFAULT on those pages unless the
-        // mapping is made writable first. Prefer mprotect + writev, then ptrace.
+        // Hostname/login patches live in read-only PE sections. Prefer
+        // process_vm_writev, then PTRACE_POKEDATA (can write RO pages). Avoid
+        // remote mprotect/syscall injection first — that crashes Wine often.
         if (TryWrite(address, data))
             return;
+
+        try
+        {
+            WriteViaPtrace(address, data);
+            return;
+        }
+        catch
+        {
+            // Fall through to mprotect.
+        }
 
         try
         {
@@ -218,9 +228,10 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
                 return ready;
             }
 
-            // Process is clearly Wow (comm/cmdline) — patch after a short settle.
+            // Process is clearly Wow (comm/cmdline) — wait longer so wine finishes
+            // early init; attaching during loader often kills the process.
             if (anyClient is int earlyPid &&
-                DateTime.UtcNow - firstSeen > TimeSpan.FromSeconds(5))
+                DateTime.UtcNow - firstSeen > TimeSpan.FromSeconds(12))
             {
                 WaitStatus = $"patching pid {earlyPid}";
                 return earlyPid;
