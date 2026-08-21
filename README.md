@@ -146,8 +146,8 @@ If **PLAY** fails:
   run in a container and block the launcher's in-memory patches (`ptrace`).
   A manual `proton-cachyos-slr` script that starts a **pre-patched** exe can
   work fine; the launcher must patch a live unpatched client for authnet, so
-  it cannot use that SLR path. GE is launched with Steam's library runtime
-  kept enabled so DXVK can create a window (disabling it left Wow headless).
+  it cannot use that SLR path. GE is started with `PROTON_NO_STEAM_RUNTIME=1`
+  so `/proc/pid/maps` stays readable; host Vulkan ICDs are passed through for DXVK.
 - Empty Proton list — install Steam Proton (or GE) and reopen Configuration
 - `ptrace` / “could not attach” — do not use `*-slr` Proton; same user as the
   game; `kernel.yama.ptrace_scope` is `0` or `1`

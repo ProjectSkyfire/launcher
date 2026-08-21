@@ -197,10 +197,8 @@ public static class LinuxClientRuntime
         StopPrefixWineServer(prefix, selected.InstallPath);
         RepairProtonCompatData(prefix);
 
-        // *-slr / pressure-vessel blocks ptrace — never launch through it. Prefer GE
-        // (or any non-SLR) with a normal `proton run` so DXVK/Vulkan get a real window.
-        // Stripping the Steam runtime (PROTON_NO_STEAM_RUNTIME) left Wow-64.exe alive
-        // with no GUI on Arch; launch-wow.sh keeps the runtime and gets a window.
+        // *-slr / pressure-vessel blocks ptrace and /proc/pid/maps. Prefer GE
+        // with PROTON_NO_STEAM_RUNTIME so the host can attach for authnet patches.
         if (IsSteamRuntimeProton(selected.DisplayName) ||
             IsSteamRuntimeProton(selected.InstallPath))
         {
@@ -215,7 +213,6 @@ public static class LinuxClientRuntime
             RepairProtonCompatData(prefix);
         }
 
-        // Let Proton's own script install DXVK into the prefix (do not prefer bare wine).
         TryEnsureProtonGraphicsStack(selected.InstallPath, prefix);
         return BuildProtonScriptStartInfo(selected, exePath, workingDirectory, prefix);
     }
@@ -235,13 +232,18 @@ public static class LinuxClientRuntime
         startInfo.ArgumentList.Add("run");
         AddClientArguments(startInfo, exePath);
         ApplyProtonEnvironment(startInfo, proton.InstallPath, prefix, workingDirectory);
-        // Keep Steam runtime libs (Vulkan/DXVK) — required for a game window.
-        // Do NOT set PROTON_NO_STEAM_RUNTIME here; that produced a headless Wow process.
-        // Still avoid *-slr pressure-vessel (handled by PreferAttachableProton / above).
+        // Host namespace required for /proc/pid/maps + ptrace (authnet live patches).
+        // GE 11's Steam runtime/pressure-vessel makes maps return EACCES from the host.
+        startInfo.Environment["PROTON_NO_STEAM_RUNTIME"] = "1";
+        startInfo.Environment["STEAM_RUNTIME"] = "0";
+        startInfo.Environment["UMU_NO_RUNTIME"] = "1";
         startInfo.Environment["PROTONFIXES_DISABLE"] = "1";
         startInfo.Environment["PROTON_FSR4_UPGRADE"] = "0";
         startInfo.Environment["PROTON_FSR4_RDNA3_UPGRADE"] = "0";
         startInfo.Environment["PROTON_DLSS_UPGRADE"] = "0";
+        // Help DXVK find the host Vulkan driver without the Steam runtime container.
+        EnsureHostVulkanIcd(startInfo);
+        ApplyProtonHostLibraryPath(startInfo, proton.InstallPath);
         return startInfo;
     }
 
@@ -400,6 +402,32 @@ public static class LinuxClientRuntime
         var value = Environment.GetEnvironmentVariable(name);
         if (!string.IsNullOrWhiteSpace(value))
             startInfo.Environment[name] = value;
+    }
+
+    /// <summary>
+    /// When Steam runtime is disabled, DXVK needs a host Vulkan ICD or the client
+    /// stays alive with no window.
+    /// </summary>
+    private static void EnsureHostVulkanIcd(ProcessStartInfo startInfo)
+    {
+        if (startInfo.Environment.TryGetValue("VK_ICD_FILENAMES", out var existing) &&
+            !string.IsNullOrWhiteSpace(existing))
+            return;
+
+        string[] candidates =
+        [
+            "/usr/share/vulkan/icd.d/radeon_icd.x86_64.json",
+            "/usr/share/vulkan/icd.d/amd_icd64.json",
+            "/usr/share/vulkan/icd.d/nvidia_icd.json",
+            "/usr/share/vulkan/icd.d/nvidia_icd.x86_64.json",
+            "/usr/share/vulkan/icd.d/intel_icd.x86_64.json",
+            "/usr/share/vulkan/icd.d/lvp_icd.x86_64.json",
+            "/etc/vulkan/icd.d/nvidia_icd.json",
+        ];
+
+        var found = candidates.Where(File.Exists).ToArray();
+        if (found.Length > 0)
+            startInfo.Environment["VK_ICD_FILENAMES"] = string.Join(':', found);
     }
 
     private static void TryAddSteamCompatMounts(ProcessStartInfo startInfo, string? installPath)

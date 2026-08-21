@@ -367,7 +367,13 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
         }
 
         if (headerMap is null)
-            throw new InvalidOperationException($"Could not find module '{fileName}' in the client process.");
+        {
+            throw new InvalidOperationException(
+                $"Could not read module maps for '{fileName}' (pid {pid}). " +
+                "Steam runtime/pressure-vessel often denies /proc/pid/maps from the host — " +
+                "the launcher forces PROTON_NO_STEAM_RUNTIME for GE so patches can attach. " +
+                "Kill leftover Wow/wine processes and try PLAY again.");
+        }
 
         return (headerMap.Value.Start, PeImportTable.GetSizeOfImage(fileBuffer));
     }
@@ -785,7 +791,22 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
     private static List<MapRange> ParseMaps(int pid)
     {
         var maps = new List<MapRange>();
-        foreach (var line in File.ReadLines($"/proc/{pid}/maps"))
+        IEnumerable<string> lines;
+        try
+        {
+            lines = File.ReadLines($"/proc/{pid}/maps");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Steam runtime / pressure-vessel: host cannot read container maps.
+            return maps;
+        }
+        catch (IOException)
+        {
+            return maps;
+        }
+
+        foreach (var line in lines)
         {
             var space = line.IndexOf(' ');
             if (space < 0)
