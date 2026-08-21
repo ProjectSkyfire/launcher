@@ -74,7 +74,8 @@ launching `Wow.exe` / `Wow-64.exe` through [Proton](https://github.com/ValveSoft
 3. In **Configuration**, point **Client Location** at the folder that contains
    `Wow.exe` / `Wow-64.exe`, and pick **Proton** or **Wine**. Proton versions
    are detected from Steam and `compatibilitytools.d`. Leave **Proton Prefix**
-   empty to use `~/.local/share/SkyFireLauncher/proton`.
+   empty to use `<client>/compatdata` (same as a typical `launch-wow.sh`).
+   Override **Proton Prefix** only if you want a different prefix.
 
 The Linux launcher writes a sidecar next to your client (e.g.
 `Wow-64.skyfire.exe` in the same folder as `Data/`), applies hostname +

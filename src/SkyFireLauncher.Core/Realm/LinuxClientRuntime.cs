@@ -116,7 +116,7 @@ public static class LinuxClientRuntime
         string? protonPrefixPath,
         bool is64BitClient)
     {
-        var prefix = ResolvePrefix(protonPrefixPath);
+        var prefix = ResolvePrefix(protonPrefixPath, workingDirectory);
         Directory.CreateDirectory(prefix);
         StopPrefixWineServer(prefix, protonInstallPath);
         RepairProtonCompatData(prefix);
@@ -197,7 +197,7 @@ public static class LinuxClientRuntime
             WorkingDirectory = workingDirectory,
             UseShellExecute = false,
         };
-        AddClientArguments(startInfo, exePath);
+        AddClientArguments(startInfo, exePath, workingDirectory);
         return startInfo;
     }
 
@@ -208,15 +208,17 @@ public static class LinuxClientRuntime
         string? protonPrefixPath,
         bool is64BitClient)
     {
-        var prefix = ResolvePrefix(protonPrefixPath);
+        // Prefer game-dir compatdata like launch-wow.sh (working GUI prefix).
+        var prefix = ResolvePrefix(protonPrefixPath, workingDirectory);
         Directory.CreateDirectory(prefix);
 
-        // Linux launches a pre-patched copy — no host ptrace — so Steam runtime /
-        // *-slr is fine and is what actually gives Wow a window (see launch-wow.sh).
-        var selected = proton;
+        // Prefer the user's selected Proton; PreferGraphicsProton picks *-slr/cachyos when unset.
+        var selected = PreferGraphicsProton(proton);
         StopPrefixWineServer(prefix, selected.InstallPath);
         RepairProtonCompatData(prefix);
-        TryEnsureProtonGraphicsStack(selected.InstallPath, prefix);
+        // Do not force-copy DXVK into an SLR-managed prefix — Proton owns that.
+        if (!IsSteamRuntimeProton(selected.DisplayName) && !IsSteamRuntimeProton(selected.InstallPath))
+            TryEnsureProtonGraphicsStack(selected.InstallPath, prefix);
         return BuildProtonScriptStartInfo(selected, exePath, workingDirectory, prefix);
     }
 
@@ -233,10 +235,9 @@ public static class LinuxClientRuntime
             UseShellExecute = false,
         };
         startInfo.ArgumentList.Add("run");
-        AddClientArguments(startInfo, exePath);
+        AddClientArguments(startInfo, exePath, workingDirectory);
         ApplyProtonEnvironment(startInfo, proton.InstallPath, prefix, workingDirectory);
-        // Keep Steam runtime (needed for GUI). Do not set PROTON_NO_STEAM_RUNTIME.
-        startInfo.Environment["PROTONFIXES_DISABLE"] = "1";
+        // Match launch-wow.sh: leave Steam runtime alone, minimal ProtonFixes noise.
         startInfo.Environment["PROTON_FSR4_UPGRADE"] = "0";
         startInfo.Environment["PROTON_FSR4_RDNA3_UPGRADE"] = "0";
         startInfo.Environment["PROTON_DLSS_UPGRADE"] = "0";
@@ -260,7 +261,7 @@ public static class LinuxClientRuntime
             WorkingDirectory = workingDirectory,
             UseShellExecute = false,
         };
-        AddClientArguments(startInfo, exePath);
+        AddClientArguments(startInfo, exePath, workingDirectory);
         startInfo.Environment["WINEPREFIX"] = Path.Combine(prefix, "pfx");
         ApplyProtonEnvironment(startInfo, protonInstallPath, prefix, workingDirectory);
         ApplyProtonHostLibraryPath(startInfo, protonInstallPath);
@@ -268,12 +269,40 @@ public static class LinuxClientRuntime
     }
 
     /// <summary>
-    /// Match a known-good manual Proton launch (e.g. launch-wow.sh): exe + -console.
+    /// Match launch-wow.sh: relative <c>./Wow-64.skyfire.exe</c> + <c>-console</c>.
     /// </summary>
-    private static void AddClientArguments(ProcessStartInfo startInfo, string exePath)
+    private static void AddClientArguments(ProcessStartInfo startInfo, string exePath, string workingDirectory)
     {
-        startInfo.ArgumentList.Add(exePath);
+        var fullExe = Path.GetFullPath(exePath);
+        var fullDir = string.IsNullOrWhiteSpace(workingDirectory)
+            ? null
+            : Path.GetFullPath(workingDirectory);
+        if (fullDir is not null &&
+            fullExe.StartsWith(fullDir.TrimEnd(Path.DirectorySeparatorChar, '/') + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            startInfo.ArgumentList.Add("./" + Path.GetFileName(fullExe));
+        }
+        else
+        {
+            startInfo.ArgumentList.Add(fullExe);
+        }
+
         startInfo.ArgumentList.Add("-console");
+    }
+
+    /// <summary>
+    /// Prefer proton-cachyos-slr / other SLR when the selected install is weak for GUI.
+    /// </summary>
+    private static ProtonInstall PreferGraphicsProton(ProtonInstall selected)
+    {
+        if (IsSteamRuntimeProton(selected.DisplayName) || IsSteamRuntimeProton(selected.InstallPath))
+            return selected;
+
+        var slr = DiscoverProtonInstalls().FirstOrDefault(p =>
+            (IsSteamRuntimeProton(p.DisplayName) || IsSteamRuntimeProton(p.InstallPath)) &&
+            p.DisplayName.Contains("cachyos", StringComparison.OrdinalIgnoreCase));
+        return slr ?? selected;
     }
 
     private static void ApplyProtonHostLibraryPath(ProcessStartInfo startInfo, string protonInstallPath)
@@ -349,13 +378,10 @@ public static class LinuxClientRuntime
         // Same bare-Proton env as a manual launch-wow.sh (outside Steam).
         startInfo.Environment["SteamAppId"] = "0";
         startInfo.Environment["SteamGameId"] = "0";
-        // Wow 5.4.8 is D3D9; force DXVK instead of wined3d/vkd3d.
+        // Let Proton/DXVK manage d3d9 — do not force WINEDLLOVERRIDES (breaks some prefixes).
         startInfo.Environment["PROTON_USE_WINED3D"] = "0";
-        // Match Proton's default sync so a leftover wineserver from a prior
-        // launch does not reject children with WINEFSYNC mismatches.
         startInfo.Environment["WINEFSYNC"] = "1";
         startInfo.Environment["WINEESYNC"] = "1";
-        MergeWineDllOverrides(startInfo, "d3d9,d3d11,d3d10core,dxgi=n");
 
         var steamRoot = FindSteamRoot() ?? EnsureSteamClientStub(prefix);
         startInfo.Environment["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = steamRoot;
@@ -363,20 +389,31 @@ public static class LinuxClientRuntime
             startInfo.Environment["STEAM_COMPAT_INSTALL_PATH"] = Path.GetFullPath(workingDirectory);
 
         var logPath = Path.Combine(prefix, "skyfire-launch.log");
-        if (!startInfo.Environment.TryGetValue("WINEDEBUG", out var existing) ||
-            string.IsNullOrWhiteSpace(existing))
-        {
-            startInfo.Environment["WINEDEBUG"] =
-                Environment.GetEnvironmentVariable("SKYFIRE_WINEDEBUG") ?? "+err";
-        }
-
-        // Always capture err logs; keep channels narrow so pipes do not stall.
-        startInfo.RedirectStandardOutput = true;
-        startInfo.RedirectStandardError = true;
         startInfo.Environment["SKYFIRE_LAUNCH_LOG"] = logPath;
         startInfo.CreateNoWindow = true;
 
-        // Make sure the game can open a window on the same session as the launcher.
+        // Redirecting pipes can stall Proton/Wine; only capture when debugging.
+        var captureLog = string.Equals(
+            Environment.GetEnvironmentVariable("SKYFIRE_LAUNCH_DEBUG"), "1", StringComparison.Ordinal);
+        if (captureLog)
+        {
+            startInfo.RedirectStandardOutput = true;
+            startInfo.RedirectStandardError = true;
+            if (!startInfo.Environment.TryGetValue("WINEDEBUG", out var existing) ||
+                string.IsNullOrWhiteSpace(existing))
+            {
+                startInfo.Environment["WINEDEBUG"] =
+                    Environment.GetEnvironmentVariable("SKYFIRE_WINEDEBUG") ?? "+err";
+            }
+        }
+        else
+        {
+            startInfo.RedirectStandardOutput = false;
+            startInfo.RedirectStandardError = false;
+            startInfo.Environment["WINEDEBUG"] =
+                Environment.GetEnvironmentVariable("SKYFIRE_WINEDEBUG") ?? "-all";
+        }
+
         CopyEnvIfPresent(startInfo, "DISPLAY");
         CopyEnvIfPresent(startInfo, "WAYLAND_DISPLAY");
         CopyEnvIfPresent(startInfo, "XAUTHORITY");
@@ -812,8 +849,21 @@ public static class LinuxClientRuntime
         return null;
     }
 
-    private static string ResolvePrefix(string? protonPrefixPath) =>
-        string.IsNullOrWhiteSpace(protonPrefixPath) ? DefaultProtonPrefixPath : protonPrefixPath.Trim();
+    private static string ResolvePrefix(string? protonPrefixPath, string? gameDirectory = null)
+    {
+        if (!string.IsNullOrWhiteSpace(protonPrefixPath))
+            return protonPrefixPath.Trim();
+
+        // launch-wow.sh uses $GAME_DIR/compatdata — reuse that when present so the
+        // same working prefix (and GPU setup) is used.
+        if (!string.IsNullOrWhiteSpace(gameDirectory))
+        {
+            var gameCompat = Path.Combine(Path.GetFullPath(gameDirectory), "compatdata");
+            return gameCompat;
+        }
+
+        return DefaultProtonPrefixPath;
+    }
 
     private static string? FindProtonWineBinary(string installPath, bool is64BitClient)
     {
