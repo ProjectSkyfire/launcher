@@ -143,7 +143,10 @@ If **PLAY** fails:
 
 - Prefer **GE-Proton** or Steam **Proton 9/Experimental** (or
   `proton-cachyos-native`). Avoid `*-slr` / Steam Linux Runtime builds — they
-  run in a container and block the launcher's in-memory patches (`ptrace`)
+  run in a container and block the launcher's in-memory patches (`ptrace`).
+  A manual `proton-cachyos-slr` script that starts a **pre-patched** exe can
+  work fine; the launcher must patch a live unpatched client for authnet, so
+  it cannot use that SLR path.
 - Empty Proton list — install Steam Proton (or GE) and reopen Configuration
 - `ptrace` / “could not attach” — do not use `*-slr` Proton; same user as the
   game; `kernel.yama.ptrace_scope` is `0` or `1`

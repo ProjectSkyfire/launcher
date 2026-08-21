@@ -179,7 +179,7 @@ public static class LinuxClientRuntime
             WorkingDirectory = workingDirectory,
             UseShellExecute = false,
         };
-        startInfo.ArgumentList.Add(exePath);
+        AddClientArguments(startInfo, exePath);
         return startInfo;
     }
 
@@ -238,14 +238,14 @@ public static class LinuxClientRuntime
             UseShellExecute = false,
             FileName = umu,
         };
-        startInfo.ArgumentList.Add(exePath);
+        AddClientArguments(startInfo, exePath);
         startInfo.Environment["PROTONPATH"] = "GE-Proton";
         startInfo.Environment["GAMEID"] = "0";
         startInfo.Environment["UMU_NO_RUNTIME"] = "1";
         startInfo.Environment["PROTON_NO_STEAM_RUNTIME"] = "1";
         startInfo.Environment["PROTONFIXES_DISABLE"] = "1";
         startInfo.Environment["PROTON_FSR4_UPGRADE"] = "0";
-        ApplyProtonEnvironment(startInfo, selected.InstallPath, prefix);
+        ApplyProtonEnvironment(startInfo, selected.InstallPath, prefix, workingDirectory);
         startInfo.Environment["PROTONPATH"] = "GE-Proton";
         return startInfo;
     }
@@ -263,9 +263,11 @@ public static class LinuxClientRuntime
             UseShellExecute = false,
         };
         startInfo.ArgumentList.Add("run");
-        startInfo.ArgumentList.Add(exePath);
-        ApplyProtonEnvironment(startInfo, proton.InstallPath, prefix);
+        AddClientArguments(startInfo, exePath);
+        ApplyProtonEnvironment(startInfo, proton.InstallPath, prefix, workingDirectory);
         // Stay on the host namespace so ptrace can attach (no pressure-vessel).
+        // launch-wow.sh uses *-slr for a pre-patched exe; we cannot — authnet
+        // needs live memory patches from the host.
         startInfo.Environment["PROTON_NO_STEAM_RUNTIME"] = "1";
         startInfo.Environment["STEAM_RUNTIME"] = "0";
         startInfo.Environment["UMU_NO_RUNTIME"] = "1";
@@ -294,11 +296,20 @@ public static class LinuxClientRuntime
             WorkingDirectory = workingDirectory,
             UseShellExecute = false,
         };
-        startInfo.ArgumentList.Add(exePath);
+        AddClientArguments(startInfo, exePath);
         startInfo.Environment["WINEPREFIX"] = Path.Combine(prefix, "pfx");
-        ApplyProtonEnvironment(startInfo, protonInstallPath, prefix);
+        ApplyProtonEnvironment(startInfo, protonInstallPath, prefix, workingDirectory);
         ApplyProtonHostLibraryPath(startInfo, protonInstallPath);
         return startInfo;
+    }
+
+    /// <summary>
+    /// Match a known-good manual Proton launch (e.g. launch-wow.sh): exe + -console.
+    /// </summary>
+    private static void AddClientArguments(ProcessStartInfo startInfo, string exePath)
+    {
+        startInfo.ArgumentList.Add(exePath);
+        startInfo.ArgumentList.Add("-console");
     }
 
     private static void ApplyProtonHostLibraryPath(ProcessStartInfo startInfo, string protonInstallPath)
@@ -361,12 +372,19 @@ public static class LinuxClientRuntime
                 p.DisplayName.StartsWith("Proton-GE", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static void ApplyProtonEnvironment(ProcessStartInfo startInfo, string protonInstallPath, string prefix)
+    private static void ApplyProtonEnvironment(
+        ProcessStartInfo startInfo,
+        string protonInstallPath,
+        string prefix,
+        string workingDirectory)
     {
         var winePrefix = Path.Combine(prefix, "pfx");
         startInfo.Environment["STEAM_COMPAT_DATA_PATH"] = prefix;
         startInfo.Environment["WINEPREFIX"] = winePrefix;
         startInfo.Environment["PROTONPATH"] = protonInstallPath;
+        // Same bare-Proton env as a manual launch-wow.sh (outside Steam).
+        startInfo.Environment["SteamAppId"] = "0";
+        startInfo.Environment["SteamGameId"] = "0";
         // Wow 5.4.8 is D3D9; force DXVK instead of wined3d/vkd3d.
         startInfo.Environment["PROTON_USE_WINED3D"] = "0";
         // Match Proton's default sync so a leftover wineserver from a prior
@@ -377,46 +395,39 @@ public static class LinuxClientRuntime
 
         var steamRoot = FindSteamRoot() ?? EnsureSteamClientStub(prefix);
         startInfo.Environment["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = steamRoot;
+        if (!string.IsNullOrWhiteSpace(workingDirectory))
+            startInfo.Environment["STEAM_COMPAT_INSTALL_PATH"] = Path.GetFullPath(workingDirectory);
 
         var logPath = Path.Combine(prefix, "skyfire-launch.log");
-        // Never enable +module here: redirected stderr pipes fill and stall Wine,
-        // which looks like "Launched" while the game is frozen/dead.
         if (!startInfo.Environment.TryGetValue("WINEDEBUG", out var existing) ||
             string.IsNullOrWhiteSpace(existing))
         {
             startInfo.Environment["WINEDEBUG"] =
-                Environment.GetEnvironmentVariable("SKYFIRE_WINEDEBUG") ?? "-all";
+                Environment.GetEnvironmentVariable("SKYFIRE_WINEDEBUG") ?? "+err";
         }
 
-        // Only capture logs when explicitly debugging. Redirected pipes can stall
-        // Proton/ProtonFixes while it downloads or wineboots (looks like a UI freeze).
-        var captureLog = string.Equals(
-            Environment.GetEnvironmentVariable("SKYFIRE_LAUNCH_DEBUG"), "1", StringComparison.Ordinal);
-        if (captureLog)
-        {
-            startInfo.RedirectStandardOutput = true;
-            startInfo.RedirectStandardError = true;
-            startInfo.Environment["SKYFIRE_LAUNCH_LOG"] = logPath;
-        }
-        else
-        {
-            startInfo.RedirectStandardOutput = false;
-            startInfo.RedirectStandardError = false;
-            try
-            {
-                File.WriteAllText(logPath,
-                    $"SkyFire launch {DateTime.UtcNow:o}\n" +
-                    "Set SKYFIRE_LAUNCH_DEBUG=1 to capture Proton/Wine stderr.\n");
-            }
-            catch
-            {
-                // optional
-            }
-        }
-
+        // Always capture err logs; keep channels narrow so pipes do not stall.
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
+        startInfo.Environment["SKYFIRE_LAUNCH_LOG"] = logPath;
         startInfo.CreateNoWindow = true;
 
-        TryAddSteamCompatMounts(startInfo, Environment.GetEnvironmentVariable("STEAM_COMPAT_INSTALL_PATH"));
+        // Make sure the game can open a window on the same session as the launcher.
+        CopyEnvIfPresent(startInfo, "DISPLAY");
+        CopyEnvIfPresent(startInfo, "WAYLAND_DISPLAY");
+        CopyEnvIfPresent(startInfo, "XAUTHORITY");
+        CopyEnvIfPresent(startInfo, "XDG_RUNTIME_DIR");
+        CopyEnvIfPresent(startInfo, "XDG_SESSION_TYPE");
+        CopyEnvIfPresent(startInfo, "DBUS_SESSION_BUS_ADDRESS");
+
+        TryAddSteamCompatMounts(startInfo, workingDirectory);
+    }
+
+    private static void CopyEnvIfPresent(ProcessStartInfo startInfo, string name)
+    {
+        var value = Environment.GetEnvironmentVariable(name);
+        if (!string.IsNullOrWhiteSpace(value))
+            startInfo.Environment[name] = value;
     }
 
     private static void TryAddSteamCompatMounts(ProcessStartInfo startInfo, string? installPath)

@@ -116,9 +116,8 @@ public static class ClientProcessLauncher
         int? clientPid = null;
         try
         {
-            // Require the real game process: Wine often maps Wow-64.exe briefly
-            // during GetBinaryType / inspection without ever creating a window.
-            // Only a process that also has d3d9.dll loaded is the running client.
+            // Real Wow process (cmdline + PE), patch before D3D fully starts, then
+            // confirm graphics came up without having frozen every Wine thread.
             clientPid = LinuxRemoteProcess.WaitForReadyClient(exePath, hostProcess.Id, timeout);
 
             using (var process = new LinuxRemoteProcess(clientPid.Value))
@@ -127,6 +126,8 @@ public static class ClientProcessLauncher
                 var (baseAddress, moduleSize) = LinuxRemoteProcess.FindPeModule(clientPid.Value, exePath, fileBuffer);
                 ClientImagePatcher.Apply(process, baseAddress, moduleSize, exePath, targetAddress, enableAuthnetLogin);
             }
+
+            LinuxRemoteProcess.WaitForMappedDll(clientPid.Value, "d3d9.dll", TimeSpan.FromSeconds(45));
 
             if (!WaitForClientStillAlive(clientPid.Value, TimeSpan.FromSeconds(5)))
             {
@@ -140,10 +141,10 @@ public static class ClientProcessLauncher
                     logHint);
             }
 
-            if (!LinuxRemoteProcess.MapsContainDll(clientPid.Value, "d3d9.dll"))
+            if (!LinuxRemoteProcess.CommandLineMentions(clientPid.Value, Path.GetFileName(exePath)))
             {
                 throw new InvalidOperationException(
-                    "Attached to a Wine helper that is not the running game (no d3d9.dll). Try PLAY again.");
+                    "Attached process no longer looks like the WoW client. Try PLAY again.");
             }
 
             return clientPid.Value;

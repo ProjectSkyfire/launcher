@@ -168,8 +168,9 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
     }
 
     /// <summary>
-    /// Waits for a process that has both the client PE and d3d9.dll mapped.
-    /// Wine helpers often map the exe briefly without ever being the game.
+    /// Waits for the real game process: cmdline mentions the client exe and the
+    /// PE is mapped. Do not require d3d9 yet — we patch before graphics init so
+    /// ptrace does not freeze DXVK startup (alive process, no window).
     /// </summary>
     public static int WaitForReadyClient(string exePath, int rootPid, TimeSpan timeout)
     {
@@ -180,9 +181,9 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
         {
             foreach (var pid in EnumerateCandidateClientPids(rootPid))
             {
-                if (!MapsContain(pid, exePath, fileName))
+                if (!CommandLineMentions(pid, fileName))
                     continue;
-                if (!MapsContainDll(pid, "d3d9.dll"))
+                if (!MapsContain(pid, exePath, fileName))
                     continue;
                 return pid;
             }
@@ -192,19 +193,36 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
                 Thread.Sleep(200);
                 foreach (var pid in EnumeratePids())
                 {
-                    if (MapsContain(pid, exePath, fileName) && MapsContainDll(pid, "d3d9.dll"))
+                    if (CommandLineMentions(pid, fileName) && MapsContain(pid, exePath, fileName))
                         return pid;
                 }
 
                 throw new InvalidOperationException(
-                    $"Wine/Proton exited before {fileName} finished starting (no process with d3d9.dll). Check skyfire-launch.log.");
+                    $"Wine/Proton exited before {fileName} started. Check skyfire-launch.log.");
             }
 
             Thread.Sleep(50);
         }
 
         throw new InvalidOperationException(
-            $"Timed out waiting for {fileName} with d3d9.dll. The game never reached graphics startup — check display/Vulkan and skyfire-launch.log.");
+            $"Timed out waiting for {fileName} to start. Check display/Vulkan and skyfire-launch.log.");
+    }
+
+    public static bool CommandLineMentions(int pid, string token)
+    {
+        try
+        {
+            var raw = File.ReadAllText($"/proc/{pid}/cmdline");
+            if (string.IsNullOrEmpty(raw))
+                return false;
+
+            var cmdline = raw.Replace('\0', ' ');
+            return cmdline.Contains(token, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public static bool MapsContainDll(int pid, string dllFileName)
@@ -299,34 +317,27 @@ internal sealed class LinuxRemoteProcess : IRemoteProcess
 
     private void AttachAllThreads()
     {
-        var taskDir = $"/proc/{Id}/task";
-        if (!Directory.Exists(taskDir))
+        // Only attach the thread-group leader. Stopping every Wine thread while
+        // D3D/DXVK is starting routinely leaves Wow alive but with no window.
+        if (!Directory.Exists($"/proc/{Id}"))
             throw new InvalidOperationException("The client process exited before it could be patched.");
 
-        foreach (var dir in Directory.GetDirectories(taskDir))
-        {
-            if (!int.TryParse(Path.GetFileName(dir), out var tid))
-                continue;
-
-            if (Native.ptrace(Native.PTRACE_ATTACH, tid, 0, 0) != 0)
-                continue;
-
-            if (!WaitForStop(tid, TimeSpan.FromSeconds(2)))
-            {
-                Native.ptrace(Native.PTRACE_DETACH, tid, 0, 0);
-                continue;
-            }
-
-            _attachedTids.Add(tid);
-        }
-
-        if (_attachedTids.Count == 0)
+        if (Native.ptrace(Native.PTRACE_ATTACH, Id, 0, 0) != 0)
         {
             throw new InvalidOperationException(
                 "Could not attach to the client process (ptrace). " +
                 "Steam Linux Runtime / *-slr Proton builds block host ptrace — pick GE-Proton or proton-cachyos-native. " +
                 "Also check kernel.yama.ptrace_scope (0 or 1) and run the launcher as the same user that owns the Wine process.");
         }
+
+        if (!WaitForStop(Id, TimeSpan.FromSeconds(3)))
+        {
+            Native.ptrace(Native.PTRACE_DETACH, Id, 0, 0);
+            throw new InvalidOperationException(
+                "ptrace attached but the client thread did not stop. Try PLAY again, or pick a different Proton build.");
+        }
+
+        _attachedTids.Add(Id);
     }
 
     private static bool WaitForStop(int tid, TimeSpan timeout)
