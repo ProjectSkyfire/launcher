@@ -10,8 +10,8 @@ namespace SkyFireLauncher;
 
 public partial class MainWindow : Window
 {
-    // The client's own BattlenetLogin CVar (realmListbn) is written with an
-    // explicit port rather than relying on any client-side default port.
+    // The client's own authnet CVar is written with an explicit port rather
+    // than relying on any client-side default port.
     private const ushort AuthnetGamePort = 1119;
 
     private readonly ConfigManager _configManager = new();
@@ -30,9 +30,11 @@ public partial class MainWindow : Window
         LoginAddressTextBox.Text = _config.LoginAddress;
         ClearCacheOnLoginCheckBox.IsChecked = _config.ClearCacheOnLogin;
         EnableAuthnetLoginCheckBox.IsChecked = _config.EnableAuthnetLogin;
+        AuthnetIdentityTextBox.Text = _config.AuthnetIdentity;
 
         SetVersionRadios(Version32RadioButton, Version64RadioButton, _config.DefaultVersion);
         SetVersionRadios(LaunchVersion32RadioButton, LaunchVersion64RadioButton, _config.DefaultVersion);
+        UpdateAuthnetLoginVisibility();
     }
 
     private static void SetVersionRadios(System.Windows.Controls.RadioButton x86Radio, System.Windows.Controls.RadioButton x64Radio, ClientVersion version)
@@ -114,6 +116,11 @@ public partial class MainWindow : Window
         }
     }
 
+    private void UpdateAuthnetLoginVisibility()
+    {
+        AuthnetLoginPanel.Visibility = _config.EnableAuthnetLogin ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private async void MigrateSubmitButton_Click(object sender, RoutedEventArgs e)
     {
         var username = MigrateUsernameTextBox.Text.Trim();
@@ -185,6 +192,7 @@ public partial class MainWindow : Window
         _config.LoginAddress = LoginAddressTextBox.Text;
         _config.ClearCacheOnLogin = ClearCacheOnLoginCheckBox.IsChecked == true;
         _config.EnableAuthnetLogin = EnableAuthnetLoginCheckBox.IsChecked == true;
+        _config.AuthnetIdentity = AuthnetIdentityTextBox.Text.Trim();
 
         try
         {
@@ -198,11 +206,12 @@ public partial class MainWindow : Window
 
         // Keep the launch pane's selector in sync with the newly saved default.
         SetVersionRadios(LaunchVersion32RadioButton, LaunchVersion64RadioButton, _config.DefaultVersion);
+        UpdateAuthnetLoginVisibility();
 
         System.Windows.MessageBox.Show("Configuration saved.", "SkyFire Launcher", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
-    private void LaunchButton_Click(object sender, RoutedEventArgs e)
+    private async void LaunchButton_Click(object sender, RoutedEventArgs e)
     {
         var version = LaunchVersion64RadioButton.IsChecked == true ? ClientVersion.X64 : ClientVersion.X86;
         var exeName = version == ClientVersion.X64 ? "Wow-64.exe" : "Wow.exe";
@@ -222,6 +231,8 @@ public partial class MainWindow : Window
 
         try
         {
+            LaunchButton.IsEnabled = false;
+
             if (_config.ClearCacheOnLogin)
                 ClearClientCache(_config.ClientLocation);
 
@@ -229,11 +240,30 @@ public partial class MainWindow : Window
 
             if (_config.EnableAuthnetLogin)
             {
-                // GruntLogin has a confirmed hardcoded fallback to port 3724
-                // when realmlist carries no port. BattlenetLogin's equivalent
-                // default (if any) was never confirmed in the client, so
-                // don't rely on it - always write the port explicitly.
+                var authnetIdentity = AuthnetIdentityTextBox.Text.Trim();
+                var authnetPassword = AuthnetPasswordBox.Password;
+                if (string.IsNullOrWhiteSpace(authnetIdentity) || string.IsNullOrEmpty(authnetPassword))
+                {
+                    LaunchStatusTextBlock.Text = "Enter authnet account and password.";
+                    return;
+                }
+
+                // The authnet CVar gets an explicit port so the client never
+                // falls back to an unknown default.
                 var loginHost = _config.LoginAddress.Split(':')[0];
+                LaunchStatusTextBlock.Text = "Authorizing authnet login...";
+                var grant = await AuthnetLoginGrantClient.RequestAsync(loginHost, authnetIdentity, authnetPassword);
+                AuthnetPasswordBox.Password = string.Empty;
+
+                if (grant.Result != AuthnetLoginGrantResult.Ok)
+                {
+                    LaunchStatusTextBlock.Text = grant.Result.ToDisplayMessage();
+                    return;
+                }
+
+                _config.AuthnetIdentity = authnetIdentity;
+                _configManager.Save(_config);
+
                 RealmlistConfigWriter.SetRealmlistBn(_config.ClientLocation, $"{loginHost}:{AuthnetGamePort}");
             }
 
@@ -243,6 +273,13 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             LaunchStatusTextBlock.Text = $"Failed to launch: {ex.Message}";
+        }
+        finally
+        {
+            if (_config.EnableAuthnetLogin)
+                AuthnetPasswordBox.Password = string.Empty;
+
+            LaunchButton.IsEnabled = true;
         }
     }
 

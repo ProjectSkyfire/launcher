@@ -5,9 +5,8 @@ using System.Text;
 
 namespace SkyFireLauncher.Realm;
 
-// The client builds its logon hostname at runtime (region code + a hardcoded
-// suffix, e.g. "US" + ".logon.battle.net"), so there's no static string to
-// find-and-replace for it. Instead, this hooks the client's import of
+// The client builds its logon hostname at runtime, so there's no static string
+// to find-and-replace for it. Instead, this hooks the client's import of
 // ws2_32.dll!gethostbyname so that ANY hostname it asks to resolve comes
 // back as the target address - sidestepping the string entirely.
 //

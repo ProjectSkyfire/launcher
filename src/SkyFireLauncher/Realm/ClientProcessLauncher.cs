@@ -110,22 +110,11 @@ public static class ClientProcessLauncher
             var is64Bit = PeImportTable.IsPe64Bit(fileBuffer);
             DnsResolverHook.Install(hProcess, baseAddress, fileBuffer, is64Bit, targetAddress);
 
-            // This build defaults to routing login through the modern
-            // Battle.net/Agent protocol, which SkyFire's authserver doesn't
-            // speak. These patches force it into the classic realmList-based
-            // connect flow instead, which does match SkyFire's protocol.
-            //
-            // "Email" is the one patch responsible for that: it forces the
-            // client's login-service selector to always build GruntLogin,
-            // even for an email-shaped login that would otherwise route to
-            // BattlenetLogin. Skipping it when authnet login is enabled lets
-            // plain usernames keep working through GRUNT (the "User" patch
-            // still lets those past the client's own email-only UI gate)
-            // while an email address takes the real BattlenetLogin path
-            // toward realmListbn instead.
+            // Authnet testing needs the client's login state machine left intact.
+            // The legacy flow patches below are only for the classic path.
             var loginFlowPatches = is64Bit ? LoginFlowPatches.X64 : LoginFlowPatches.X86;
             if (enableAuthnetLogin)
-                loginFlowPatches = loginFlowPatches.Where(p => p.Name != "Email").ToArray();
+                loginFlowPatches = [];
 
             foreach (var (_, pattern, replacement) in loginFlowPatches)
             {
