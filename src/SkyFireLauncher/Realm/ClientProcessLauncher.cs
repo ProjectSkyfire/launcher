@@ -9,7 +9,8 @@ namespace SkyFireLauncher.Realm;
 // Launches the client, then immediately patches its hardcoded region logon
 // hostnames directly in process memory. Nothing on disk (the exe, the hosts
 // file) is ever touched - the patch only exists in the running process, for
-// its lifetime.
+// its lifetime. Soft/authnet also installs a prop205 trampoline so Password.dll
+// 629D0 matches SkyFire authserver.
 //
 // CREATE_SUSPENDED was tried first (ideal: patch before a single instruction
 // runs) but a 32-bit target's WOW64 subsystem isn't far enough along yet at
@@ -34,7 +35,7 @@ public static class ClientProcessLauncher
         ("us.logon.worldofwarcraft.com:3724", "{0}:3724")
     ];
 
-    public static void LaunchAndRedirect(string exePath, string workingDirectory, string targetAddress)
+    public static void LaunchAndRedirect(string exePath, string workingDirectory, string targetAddress, bool enableAuthnetLogin = false)
     {
         var startupInfo = new STARTUPINFO();
         startupInfo.cb = Marshal.SizeOf<STARTUPINFO>();
@@ -48,7 +49,7 @@ public static class ClientProcessLauncher
 
         try
         {
-            PatchHostnames(processInfo.dwProcessId, exePath, targetAddress);
+            PatchHostnames(processInfo.dwProcessId, exePath, targetAddress, enableAuthnetLogin);
         }
         catch
         {
@@ -64,7 +65,7 @@ public static class ClientProcessLauncher
         }
     }
 
-    private static void PatchHostnames(int processId, string exePath, string targetAddress)
+    private static void PatchHostnames(int processId, string exePath, string targetAddress, bool enableAuthnetLogin)
     {
         var exeFileName = Path.GetFileName(exePath);
         var (baseAddress, moduleSize) = GetMainModuleInfo(processId, exeFileName);
@@ -79,10 +80,11 @@ public static class ClientProcessLauncher
             if (!ReadProcessMemory(hProcess, baseAddress, buffer, buffer.Length, out _))
                 throw new Win32Exception("Could not read the client's memory");
 
+            var loginHost = targetAddress.Split(':')[0];
             foreach (var (patternText, replacementFormat) in PatchTargets)
             {
                 var pattern = Encoding.ASCII.GetBytes(patternText + '\0');
-                var replacement = Encoding.ASCII.GetBytes(string.Format(replacementFormat, targetAddress) + '\0');
+                var replacement = Encoding.ASCII.GetBytes(string.Format(replacementFormat, loginHost) + '\0');
                 var offset = 0;
 
                 while ((offset = IndexOf(buffer, pattern, offset)) >= 0)
@@ -95,7 +97,8 @@ public static class ClientProcessLauncher
             // The actual connect hostname is built at runtime (region code +
             // a hardcoded suffix), so there's no static string for it to
             // find-and-replace above. Hook the DNS resolver import instead so
-            // whatever hostname it builds resolves to the target regardless.
+            // whatever hostname it builds resolves to the target regardless
+            // (gethostbyname and, on Wow-64, getaddrinfo / freeaddrinfo).
             //
             // Import-table lookup uses the file on disk, not the live buffer
             // above: once loaded, the loader overwrites FirstThunk (the IAT)
@@ -107,13 +110,31 @@ public static class ClientProcessLauncher
             // on disk is still correct to apply against the live baseAddress.
             var fileBuffer = File.ReadAllBytes(exePath);
             var is64Bit = PeImportTable.IsPe64Bit(fileBuffer);
-            DnsResolverHook.Install(hProcess, baseAddress, fileBuffer, is64Bit, targetAddress);
+            DnsResolverHook.Install(hProcess, baseAddress, fileBuffer, buffer, is64Bit, loginHost);
 
-            // This build defaults to routing login through the modern
-            // Battle.net/Agent protocol, which SkyFire's authserver doesn't
-            // speak. These patches force it into the classic realmList-based
-            // connect flow instead, which does match SkyFire's protocol.
+            // "Email" is the login-service selector: JZ (0x74) keeps
+            // BattlenetLogin for an email-shaped identity, JMP (0xEB)
+            // forces GruntLogin. Match the unique suffix after that opcode
+            // (the generic 0x00-wildcard pattern also hits an unrelated 0x0C).
+            if (!LoginFlowPatches.TryFindEmailOpcode(buffer, is64Bit, out var emailOffset))
+            {
+                if (enableAuthnetLogin)
+                    throw new InvalidOperationException("Could not find the client's Email login-flow branch to restore BattlenetLogin.");
+            }
+            else
+                WritePatch(hProcess, IntPtr.Add(baseAddress, emailOffset), LoginFlowPatches.EmailOpcode(enableAuthnetLogin));
+
+            // Soft/authnet: DNS + hostname strings + Email JZ + prop205 +
+            // Sunken port 1119 + connect() rewrite of sockaddr port 0.
+            // Classic Send/User/RaF/Rcv patches force Grunt and block Soft Join.
+            if (enableAuthnetLogin)
+            {
+                AuthnetProp205Hook.Install(hProcess, baseAddress, buffer, is64Bit);
+                return;
+            }
+
             var loginFlowPatches = is64Bit ? LoginFlowPatches.X64 : LoginFlowPatches.X86;
+
             foreach (var (_, pattern, replacement) in loginFlowPatches)
             {
                 var matchOffset = IndexOfWildcard(buffer, pattern, 0);

@@ -15,6 +15,9 @@
     <BaseOutputPath>..\..\Build\</BaseOutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+
+    <AuthModuleSha>0a3afee2cade3a0e8b458c4b4660104cac7fc50e2ca9bef0d708942e77f15c1d</AuthModuleSha>
+    <AuthModuleCacheSrc>$(ProgramData)\Blizzard Entertainment\Battle.net\Cache\0a\3a\$(AuthModuleSha).auth</AuthModuleCacheSrc>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,5 +26,26 @@
     <Resource Include="Fonts\*.ttf" />
     <Resource Include="Fonts\*.otf" />
   </ItemGroup>
+
+  <!-- Compile the Password.dll .auth into the exe on the operator machine so a
+       prebuilt launcher copied to another PC can seed Battle.net Cache itself.
+       Do not commit the .auth blob. -->
+  <Target Name="GenerateAuthModuleBlob"
+          BeforeTargets="CoreCompile"
+          Inputs="$(AuthModuleCacheSrc);$(MSBuildThisFileDirectory)EmbedAuthModule.ps1"
+          Outputs="$(IntermediateOutputPath)AuthModuleBlob.g.cs">
+    <Error Condition="!Exists('$(AuthModuleCacheSrc)')"
+           Text="Cannot embed AuthModule: missing $(AuthModuleCacheSrc). Build the launcher on a machine that already has this Battle.net Cache file." />
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)EmbedAuthModule.ps1&quot; -Source &quot;$(AuthModuleCacheSrc)&quot; -OutCs &quot;$(IntermediateOutputPath)AuthModuleBlob.g.cs&quot;" />
+  </Target>
+
+  <Target Name="IncludeAuthModuleBlob" BeforeTargets="CoreCompile" DependsOnTargets="GenerateAuthModuleBlob">
+    <Error Condition="!Exists('$(IntermediateOutputPath)AuthModuleBlob.g.cs')"
+           Text="AuthModuleBlob.g.cs was not generated at $(IntermediateOutputPath)AuthModuleBlob.g.cs." />
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)AuthModuleBlob.g.cs" />
+    </ItemGroup>
+  </Target>
 
 </Project>

@@ -14,12 +14,19 @@ Instead of patching files on disk, the launcher starts the WoW client normally
 and applies its changes directly to the running process in memory:
 
 - Redirects the client's login/realm connection to the server address configured
-  in the launcher, by hooking the client's own DNS resolution.
-- Applies a small set of targeted in-memory patches to the client's login flow
-  so it authenticates against a classic realmlist-based authserver (like
-  SkyFire's) instead of routing through the modern Battle.net/Agent protocol.
-- Leaves the client executable on disk untouched. Every change is undone the
-  moment the process exits.
+  in the launcher, by hooking the client's own DNS resolution (including
+  runtime names such as `US.logon.battle.net` via `gethostbyname` and
+  `getaddrinfo`).
+- **Classic GRUNT:** applies a small set of in-memory login-flow patches so
+  the client authenticates against SkyFire's realmlist-based authserver.
+- **Soft / authnet:** enable the checkbox in Configuration. This keeps
+  BattlenetLogin (Email JZ), skips those classic-force patches, DNS-redirects
+  `.logon.battle.net` to the configured login IP (Soft finish on authserver
+  port 1119), and overwrites Wow-64's per-login Auth prop205 with a fixed
+  128-byte value that matches SkyFire authserver. Does not modify Wow.exe
+  on disk (Windows). Requires the 64-bit client.
+- Leaves the client executable on disk untouched on Windows. Every change is
+  undone the moment the process exits.
 
 Support for pre-patched clients, and eventually a Battle.net-protocol-compatible
 server, is planned.
