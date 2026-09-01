@@ -39,8 +39,9 @@ public static class ClientProcessLauncher
     {
         var startupInfo = new STARTUPINFO();
         startupInfo.cb = Marshal.SizeOf<STARTUPINFO>();
+        var commandLine = BuildCommandLine(exePath, enableAuthnetLogin);
 
-        if (!CreateProcess(exePath, null, IntPtr.Zero, IntPtr.Zero, false,
+        if (!CreateProcess(exePath, commandLine, IntPtr.Zero, IntPtr.Zero, false,
                 ProcessCreationFlags.NONE, IntPtr.Zero, workingDirectory,
                 ref startupInfo, out var processInfo))
         {
@@ -63,6 +64,17 @@ public static class ClientProcessLauncher
             CloseHandle(processInfo.hThread);
             CloseHandle(processInfo.hProcess);
         }
+    }
+
+    private static string BuildCommandLine(string exePath, bool enableAuthnetLogin)
+    {
+        var commandLine = new StringBuilder();
+        commandLine.Append('"').Append(exePath).Append('"');
+
+        if (enableAuthnetLogin)
+            commandLine.Append(" -launcherlogin");
+
+        return commandLine.ToString();
     }
 
     private static void PatchHostnames(int processId, string exePath, string targetAddress, bool enableAuthnetLogin)
