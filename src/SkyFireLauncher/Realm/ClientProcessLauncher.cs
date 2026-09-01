@@ -35,7 +35,7 @@ public static class ClientProcessLauncher
         ("us.logon.worldofwarcraft.com:3724", "{0}:3724")
     ];
 
-    public static void LaunchAndRedirect(string exePath, string workingDirectory, string targetAddress, bool enableAuthnetLogin = false)
+    public static int LaunchAndRedirect(string exePath, string workingDirectory, string targetAddress, bool enableAuthnetLogin = false)
     {
         var startupInfo = new STARTUPINFO();
         startupInfo.cb = Marshal.SizeOf<STARTUPINFO>();
@@ -51,6 +51,7 @@ public static class ClientProcessLauncher
         try
         {
             PatchHostnames(processInfo.dwProcessId, exePath, targetAddress, enableAuthnetLogin);
+            return processInfo.dwProcessId;
         }
         catch
         {

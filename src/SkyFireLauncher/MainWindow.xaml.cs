@@ -272,11 +272,17 @@ public partial class MainWindow : Window
                 RealmlistConfigWriter.ClearRealmlistBn(_config.ClientLocation);
             }
 
-            ClientProcessLauncher.LaunchAndRedirect(exePath, _config.ClientLocation, _config.LoginAddress, _config.EnableAuthnetLogin);
+            var processId = ClientProcessLauncher.LaunchAndRedirect(exePath, _config.ClientLocation, _config.LoginAddress, _config.EnableAuthnetLogin);
+            if (_config.EnableAuthnetLogin)
+                ClearAuthnetRouteWhenClientExits(_config.ClientLocation, processId);
+
             LaunchStatusTextBlock.Text = $"Launched {exeName}, redirected to {_config.LoginAddress}.";
         }
         catch (Exception ex)
         {
+            if (_config.EnableAuthnetLogin)
+                RealmlistConfigWriter.ClearRealmlistBn(_config.ClientLocation);
+
             LaunchStatusTextBlock.Text = $"Failed to launch: {ex.Message}";
         }
         finally
@@ -286,6 +292,32 @@ public partial class MainWindow : Window
 
             LaunchButton.IsEnabled = true;
         }
+    }
+
+    private static void ClearAuthnetRouteWhenClientExits(string clientLocation, int processId)
+    {
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                using var process = System.Diagnostics.Process.GetProcessById(processId);
+                process.WaitForExit();
+            }
+            catch (ArgumentException)
+            {
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
+            try
+            {
+                RealmlistConfigWriter.ClearRealmlistBn(clientLocation);
+            }
+            catch
+            {
+            }
+        });
     }
 
     private static void ClearClientCache(string clientLocation)
