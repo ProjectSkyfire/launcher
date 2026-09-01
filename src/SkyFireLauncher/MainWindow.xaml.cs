@@ -264,7 +264,12 @@ public partial class MainWindow : Window
                 _config.AuthnetIdentity = authnetIdentity;
                 _configManager.Save(_config);
 
+                RealmlistConfigWriter.SetAccountName(_config.ClientLocation, authnetIdentity);
                 RealmlistConfigWriter.SetRealmlistBn(_config.ClientLocation, $"{loginHost}:{AuthnetGamePort}");
+            }
+            else
+            {
+                RealmlistConfigWriter.ClearRealmlistBn(_config.ClientLocation);
             }
 
             ClientProcessLauncher.LaunchAndRedirect(exePath, _config.ClientLocation, _config.LoginAddress, _config.EnableAuthnetLogin);
