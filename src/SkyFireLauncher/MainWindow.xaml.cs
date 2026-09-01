@@ -13,6 +13,8 @@ public partial class MainWindow : Window
     // The client's own authnet CVar is written with an explicit port rather
     // than relying on any client-side default port.
     private const ushort AuthnetGamePort = 1119;
+    private static bool UseAuthnetClientRoute =>
+        string.Equals(Environment.GetEnvironmentVariable("SKYFIRE_LAUNCHER_AUTHNET_CLIENT_ROUTE"), "1", StringComparison.Ordinal);
 
     private readonly ConfigManager _configManager = new();
     private AppConfig _config = new();
@@ -232,6 +234,8 @@ public partial class MainWindow : Window
         try
         {
             LaunchButton.IsEnabled = false;
+            var automateClientLogin = false;
+            var clientPassword = string.Empty;
 
             if (_config.ClearCacheOnLogin)
                 ClearClientCache(_config.ClientLocation);
@@ -265,15 +269,28 @@ public partial class MainWindow : Window
                 _configManager.Save(_config);
 
                 RealmlistConfigWriter.SetAccountName(_config.ClientLocation, authnetIdentity);
-                RealmlistConfigWriter.SetRealmlistBn(_config.ClientLocation, $"{loginHost}:{AuthnetGamePort}");
+                if (UseAuthnetClientRoute)
+                {
+                    RealmlistConfigWriter.SetRealmlistBn(_config.ClientLocation, $"{loginHost}:{AuthnetGamePort}");
+                }
+                else
+                {
+                    RealmlistConfigWriter.ClearRealmlistBn(_config.ClientLocation);
+                    automateClientLogin = true;
+                    clientPassword = authnetPassword;
+                }
             }
             else
             {
                 RealmlistConfigWriter.ClearRealmlistBn(_config.ClientLocation);
             }
 
-            var processId = ClientProcessLauncher.LaunchAndRedirect(exePath, _config.ClientLocation, _config.LoginAddress, _config.EnableAuthnetLogin);
-            if (_config.EnableAuthnetLogin)
+            var useAuthnetClientRoute = _config.EnableAuthnetLogin && UseAuthnetClientRoute;
+            var processId = ClientProcessLauncher.LaunchAndRedirect(exePath, _config.ClientLocation, _config.LoginAddress, useAuthnetClientRoute);
+            if (automateClientLogin)
+                ClientLoginAutomator.SubmitPasswordWhenReady(processId, clientPassword);
+
+            if (useAuthnetClientRoute)
                 ClearAuthnetRouteWhenClientExits(_config.ClientLocation, processId);
 
             LaunchStatusTextBlock.Text = $"Launched {exeName}, redirected to {_config.LoginAddress}.";
