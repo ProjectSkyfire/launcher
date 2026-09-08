@@ -37,9 +37,15 @@ public static class ClientProcessLauncher
 
     public static int LaunchAndRedirect(string exePath, string workingDirectory, string targetAddress, bool enableAuthnetLogin = false)
     {
+        var fileBuffer = File.ReadAllBytes(exePath);
+        var is64Bit = PeImportTable.IsPe64Bit(fileBuffer);
+
+        if (enableAuthnetLogin)
+            AuthnetClientSupport.PrepareModuleCache(workingDirectory, is64Bit);
+
         var startupInfo = new STARTUPINFO();
         startupInfo.cb = Marshal.SizeOf<STARTUPINFO>();
-        var commandLine = BuildCommandLine(exePath, enableAuthnetLogin);
+        var commandLine = BuildCommandLine(exePath);
 
         if (!CreateProcess(exePath, commandLine, IntPtr.Zero, IntPtr.Zero, false,
                 ProcessCreationFlags.NONE, IntPtr.Zero, workingDirectory,
@@ -50,7 +56,7 @@ public static class ClientProcessLauncher
 
         try
         {
-            PatchHostnames(processInfo.dwProcessId, exePath, targetAddress, enableAuthnetLogin);
+            PatchHostnames(processInfo.dwProcessId, exePath, fileBuffer, is64Bit, targetAddress, enableAuthnetLogin);
             return processInfo.dwProcessId;
         }
         catch
@@ -67,18 +73,14 @@ public static class ClientProcessLauncher
         }
     }
 
-    private static string BuildCommandLine(string exePath, bool enableAuthnetLogin)
+    private static string BuildCommandLine(string exePath)
     {
         var commandLine = new StringBuilder();
         commandLine.Append('"').Append(exePath).Append('"');
-
-        if (enableAuthnetLogin)
-            commandLine.Append(" -launcherlogin");
-
         return commandLine.ToString();
     }
 
-    private static void PatchHostnames(int processId, string exePath, string targetAddress, bool enableAuthnetLogin)
+    private static void PatchHostnames(int processId, string exePath, byte[] fileBuffer, bool is64Bit, string targetAddress, bool enableAuthnetLogin)
     {
         var exeFileName = Path.GetFileName(exePath);
         var (baseAddress, moduleSize) = GetMainModuleInfo(processId, exeFileName);
@@ -119,9 +121,11 @@ public static class ClientProcessLauncher
             // themselves are identical between file and loaded image (ASLR
             // only changes the base, not internal offsets), so the RVA found
             // on disk is still correct to apply against the live baseAddress.
-            var fileBuffer = File.ReadAllBytes(exePath);
-            var is64Bit = PeImportTable.IsPe64Bit(fileBuffer);
             DnsResolverHook.Install(hProcess, baseAddress, fileBuffer, is64Bit, targetAddress);
+            SocketConnectRedirect.Install(hProcess, baseAddress, fileBuffer, is64Bit, targetAddress);
+
+            if (enableAuthnetLogin)
+                ApplyAuthnetPatches(hProcess, baseAddress, buffer, is64Bit);
 
             // Authnet testing needs the client's login state machine left intact.
             // The legacy flow patches below are only for the classic path.
@@ -142,6 +146,42 @@ public static class ClientProcessLauncher
         {
             CloseHandle(hProcess);
         }
+    }
+
+    private static void ApplyAuthnetPatches(IntPtr hProcess, IntPtr baseAddress, byte[] buffer, bool is64Bit)
+    {
+        ApplyRequiredPatch(hProcess, baseAddress, buffer,
+            AuthnetClientSupport.ModulusPattern,
+            AuthnetClientSupport.ReplacementModulus,
+            wildcard: false,
+            "RSA modulus");
+
+        var architecturePatches = is64Bit
+            ? AuthnetClientSupport.X64RuntimePatches
+            : AuthnetClientSupport.X86RuntimePatches;
+
+        foreach (var (name, pattern, replacement, wildcard) in architecturePatches)
+            ApplyRequiredPatch(hProcess, baseAddress, buffer, pattern, replacement, wildcard, name);
+    }
+
+    private static void ApplyRequiredPatch(IntPtr hProcess, IntPtr baseAddress, byte[] buffer,
+        byte[] pattern, byte[] replacement, bool wildcard, string name)
+    {
+        var matchOffset = wildcard
+            ? IndexOfWildcard(buffer, pattern, 0)
+            : IndexOf(buffer, pattern, 0);
+
+        if (matchOffset < 0)
+            throw new InvalidOperationException($"The client does not contain the expected build 18414 {name} pattern.");
+
+        var nextMatch = wildcard
+            ? IndexOfWildcard(buffer, pattern, matchOffset + 1)
+            : IndexOf(buffer, pattern, matchOffset + 1);
+
+        if (nextMatch >= 0)
+            throw new InvalidOperationException($"The client contains more than one build 18414 {name} pattern.");
+
+        WritePatch(hProcess, IntPtr.Add(baseAddress, matchOffset), replacement);
     }
 
     private static void WritePatch(IntPtr hProcess, IntPtr address, byte[] replacement)
@@ -168,37 +208,37 @@ public static class ClientProcessLauncher
         // enumerate a 32-bit target process's modules from a 64-bit launcher.
         // The module list may not be queryable in the first instant after
         // CreateProcess returns - retry briefly.
-        var snapshot = InvalidHandleValue;
-        for (var attempt = 0; attempt < 20 && snapshot == InvalidHandleValue; attempt++)
+        for (var attempt = 0; attempt < 100; attempt++)
         {
             if (attempt > 0)
                 Thread.Sleep(50);
 
-            snapshot = CreateToolhelp32Snapshot(SnapshotFlags.TH32CS_SNAPMODULE | SnapshotFlags.TH32CS_SNAPMODULE32, (uint)processId);
-        }
+            var snapshot = CreateToolhelp32Snapshot(
+                SnapshotFlags.TH32CS_SNAPMODULE | SnapshotFlags.TH32CS_SNAPMODULE32,
+                (uint)processId);
+            if (snapshot == InvalidHandleValue)
+                continue;
 
-        if (snapshot == InvalidHandleValue)
-            throw new Win32Exception("Could not snapshot the client's modules");
-
-        try
-        {
-            var entry = new MODULEENTRY32 { dwSize = (uint)Marshal.SizeOf<MODULEENTRY32>() };
-            if (!Module32First(snapshot, ref entry))
-                throw new Win32Exception("Could not enumerate the client's modules");
-
-            do
+            try
             {
-                if (string.Equals(entry.szModule, exeFileName, StringComparison.OrdinalIgnoreCase))
-                    return (entry.modBaseAddr, (int)entry.modBaseSize);
-            }
-            while (Module32Next(snapshot, ref entry));
+                var entry = new MODULEENTRY32 { dwSize = (uint)Marshal.SizeOf<MODULEENTRY32>() };
+                if (!Module32First(snapshot, ref entry))
+                    continue;
 
-            throw new InvalidOperationException($"Could not find module '{exeFileName}' in the client process.");
+                do
+                {
+                    if (string.Equals(entry.szModule, exeFileName, StringComparison.OrdinalIgnoreCase))
+                        return (entry.modBaseAddr, (int)entry.modBaseSize);
+                }
+                while (Module32Next(snapshot, ref entry));
+            }
+            finally
+            {
+                CloseHandle(snapshot);
+            }
         }
-        finally
-        {
-            CloseHandle(snapshot);
-        }
+
+        throw new Win32Exception($"Could not enumerate module '{exeFileName}' in the client process.");
     }
 
     private static int IndexOf(byte[] haystack, byte[] needle, int startIndex)

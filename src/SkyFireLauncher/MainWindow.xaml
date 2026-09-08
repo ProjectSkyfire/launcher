@@ -125,27 +125,6 @@
                                                  Style="{StaticResource VersionRadio}"/>
                                 </StackPanel>
 
-                                <StackPanel x:Name="AuthnetLoginPanel"
-                                            Visibility="Collapsed"
-                                            Margin="0,0,0,12">
-                                    <TextBlock Text="AUTHNET ACCOUNT"
-                                               Style="{StaticResource FieldLabel}"
-                                               FontFamily="{StaticResource DisplayFont}"
-                                               FontSize="11"
-                                               Foreground="{StaticResource IceBrush}"/>
-                                    <TextBox x:Name="AuthnetIdentityTextBox"
-                                             Style="{StaticResource LauncherTextBox}"
-                                             Margin="0,0,0,8"/>
-
-                                    <TextBlock Text="PASSWORD"
-                                               Style="{StaticResource FieldLabel}"
-                                               FontFamily="{StaticResource DisplayFont}"
-                                               FontSize="11"
-                                               Foreground="{StaticResource IceBrush}"/>
-                                    <PasswordBox x:Name="AuthnetPasswordBox"
-                                                 Style="{StaticResource LauncherPasswordBox}"/>
-                                </StackPanel>
-
                                 <TextBlock x:Name="LaunchStatusTextBlock"
                                            Text="Ready to enter Azeroth."
                                            FontFamily="{StaticResource BodyFont}"
