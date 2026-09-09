@@ -11,6 +11,12 @@
     <RootNamespace>SkyFireLauncher</RootNamespace>
     <ApplicationTitle>SkyFire Launcher</ApplicationTitle>
     <ApplicationIcon>AppIcon.ico</ApplicationIcon>
+    <Version>1.4.0</Version>
+    <InformationalVersion>1.4 Non Authnet</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <Copyright>Copyright © 2026 Project SkyFire</Copyright>
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/ProjectSkyfire/launcher</RepositoryUrl>
 
     <BaseOutputPath>..\..\Build\</BaseOutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>

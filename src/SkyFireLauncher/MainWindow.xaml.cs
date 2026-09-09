@@ -1,7 +1,12 @@
+using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Navigation;
 using SkyFireLauncher.Configuration;
 using SkyFireLauncher.Realm;
 using WinForms = System.Windows.Forms;
@@ -16,7 +21,19 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        LoadAboutInfo();
         LoadConfig();
+    }
+
+    private void LoadAboutInfo()
+    {
+        var assembly = Assembly.GetExecutingAssembly();
+        AboutVersionTextBlock.Text = assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            ?? "1.4 Non Authnet";
+        AboutCopyrightTextBlock.Text = assembly
+            .GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright
+            ?? "Copyright © 2026 Project SkyFire";
     }
 
     private void LoadConfig()
@@ -54,15 +71,27 @@ public partial class MainWindow : Window
 
     private void SettingsCloseButton_Click(object sender, RoutedEventArgs e) => ShowSettings(false);
 
-    private void ShowSettings(bool show)
+    private void AboutOpenButton_Click(object sender, RoutedEventArgs e) => ShowAbout(true);
+
+    private void AboutCloseButton_Click(object sender, RoutedEventArgs e) => ShowAbout(false);
+
+    private void ShowSettings(bool show) =>
+        ShowOverlay(SettingsPane, SettingsPaneTransform, AboutPane, show);
+
+    private void ShowAbout(bool show) =>
+        ShowOverlay(AboutPane, AboutPaneTransform, SettingsPane, show);
+
+    private void ShowOverlay(Grid pane, TranslateTransform transform, Grid otherPane, bool show)
     {
         if (show)
         {
-            SettingsPane.Visibility = Visibility.Visible;
+            otherPane.BeginAnimation(OpacityProperty, null);
+            otherPane.Visibility = Visibility.Collapsed;
+            pane.Visibility = Visibility.Visible;
             var fade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)) { EasingFunction = new QuadraticEase() };
             var slide = new DoubleAnimation(18, 0, TimeSpan.FromMilliseconds(220)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
-            SettingsPane.BeginAnimation(OpacityProperty, fade);
-            SettingsPaneTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slide);
+            pane.BeginAnimation(OpacityProperty, fade);
+            transform.BeginAnimation(TranslateTransform.YProperty, slide);
             LaunchPane.IsEnabled = false;
         }
         else
@@ -70,11 +99,42 @@ public partial class MainWindow : Window
             var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(140));
             fade.Completed += (_, _) =>
             {
-                SettingsPane.Visibility = Visibility.Collapsed;
-                LaunchPane.IsEnabled = true;
+                pane.Visibility = Visibility.Collapsed;
+                if (otherPane.Visibility != Visibility.Visible)
+                    LaunchPane.IsEnabled = true;
             };
-            SettingsPane.BeginAnimation(OpacityProperty, fade);
+            pane.BeginAnimation(OpacityProperty, fade);
         }
+    }
+
+    private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape)
+            return;
+
+        if (AboutPane.Visibility == Visibility.Visible)
+            ShowAbout(false);
+        else if (SettingsPane.Visibility == Visibility.Visible)
+            ShowSettings(false);
+        else
+            return;
+
+        e.Handled = true;
+    }
+
+    private void ExternalLink_RequestNavigate(object sender, RequestNavigateEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show($"Could not open the link: {ex.Message}", "SkyFire Launcher",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+
+        e.Handled = true;
     }
 
     private void BrowseButton_Click(object sender, RoutedEventArgs e)

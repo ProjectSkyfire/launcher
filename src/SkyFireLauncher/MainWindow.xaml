@@ -9,6 +9,7 @@
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
         ResizeMode="CanResize"
+        PreviewKeyDown="Window_PreviewKeyDown"
         Background="{StaticResource BgDeepBrush}">
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="0"
@@ -61,6 +62,12 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,6,0">
+                        <Button x:Name="AboutOpenButton"
+                                Style="{StaticResource ChromeIconButton}"
+                                Content="ⓘ"
+                                ToolTip="About"
+                                Click="AboutOpenButton_Click"
+                                shell:WindowChrome.IsHitTestVisibleInChrome="True"/>
                         <Button x:Name="SettingsOpenButton"
                                 Style="{StaticResource ChromeIconButton}"
                                 Content="⚙"
@@ -229,6 +236,118 @@
                                         BorderBrush="{StaticResource EmberHotBrush}"
                                         Click="SaveButton_Click"/>
                             </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- About overlay -->
+                <Grid x:Name="AboutPane"
+                      Grid.Row="1"
+                      Visibility="Collapsed"
+                      Opacity="0">
+                    <Grid.RenderTransform>
+                        <TranslateTransform x:Name="AboutPaneTransform" Y="18"/>
+                    </Grid.RenderTransform>
+
+                    <Border Background="#E6070B14"/>
+
+                    <Border Background="{StaticResource BgPanelBrush}"
+                            BorderBrush="{StaticResource FrameBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="28,24"
+                            MaxWidth="520"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Margin="24">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0" Margin="0,0,0,8">
+                                <TextBlock Text="About" Style="{StaticResource SectionTitle}" Margin="0"/>
+                                <Button HorizontalAlignment="Right"
+                                        Style="{StaticResource ChromeIconButton}"
+                                        Content="✕"
+                                        ToolTip="Close"
+                                        Click="AboutCloseButton_Click"/>
+                            </Grid>
+
+                            <StackPanel Grid.Row="1" Margin="0,8,0,20">
+                                <Image Source="Assets/skyfire-launcher-logo.png"
+                                       Height="92"
+                                       Stretch="Uniform"
+                                       HorizontalAlignment="Left"
+                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+
+                                <TextBlock Text="SkyFire Launcher"
+                                           FontFamily="{StaticResource DisplayFont}"
+                                           FontSize="20"
+                                           FontWeight="Bold"
+                                           Foreground="{StaticResource TextBrush}"
+                                           Margin="0,12,0,2"/>
+                                <TextBlock x:Name="AboutVersionTextBlock"
+                                           Text="1.4 Non Authnet"
+                                           FontFamily="{StaticResource BodyFont}"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource GoldBrush}"/>
+
+                                <Border Height="1"
+                                        Background="{StaticResource BorderBrushKey}"
+                                        Margin="0,16"/>
+
+                                <TextBlock FontFamily="{StaticResource BodyFont}"
+                                           FontSize="13"
+                                           Foreground="{StaticResource TextBrush}"
+                                           Margin="0,0,0,8">
+                                    <Run Text="Website: "/>
+                                    <Hyperlink NavigateUri="https://www.projectskyfire.org"
+                                               Style="{StaticResource AboutLink}"
+                                               RequestNavigate="ExternalLink_RequestNavigate">www.projectskyfire.org</Hyperlink>
+                                </TextBlock>
+
+                                <TextBlock FontFamily="{StaticResource BodyFont}"
+                                           FontSize="13"
+                                           Foreground="{StaticResource TextBrush}"
+                                           Margin="0,0,0,16">
+                                    <Run Text="GitHub: "/>
+                                    <Hyperlink NavigateUri="https://github.com/ProjectSkyfire/launcher"
+                                               Style="{StaticResource AboutLink}"
+                                               RequestNavigate="ExternalLink_RequestNavigate">ProjectSkyfire/launcher</Hyperlink>
+                                </TextBlock>
+
+                                <TextBlock Text="GNU General Public License v3.0"
+                                           FontFamily="{StaticResource BodyFont}"
+                                           FontSize="13"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextBrush}"/>
+                                <TextBlock FontFamily="{StaticResource BodyFont}"
+                                           FontSize="12"
+                                           Foreground="{StaticResource MutedBrush}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,3,0,16">
+                                    <Run Text="This software is distributed under the GPLv3. "/>
+                                    <Hyperlink NavigateUri="https://github.com/ProjectSkyfire/launcher/blob/main/LICENSE"
+                                               Style="{StaticResource AboutLink}"
+                                               RequestNavigate="ExternalLink_RequestNavigate">Read the license</Hyperlink>
+                                </TextBlock>
+
+                                <TextBlock x:Name="AboutCopyrightTextBlock"
+                                           Text="Copyright © 2026 Project SkyFire"
+                                           FontFamily="{StaticResource BodyFont}"
+                                           FontSize="12"
+                                           Foreground="{StaticResource MutedBrush}"/>
+                            </StackPanel>
+
+                            <Button Grid.Row="2"
+                                    Content="Close"
+                                    Style="{StaticResource SecondaryButton}"
+                                    HorizontalAlignment="Right"
+                                    Click="AboutCloseButton_Click"/>
                         </Grid>
                     </Border>
                 </Grid>
