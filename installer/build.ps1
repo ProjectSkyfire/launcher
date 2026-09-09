@@ -7,11 +7,14 @@ $installerDir = Join-Path $root "installer"
 $versionFile = Join-Path $installerDir "version.txt"
 $buildNumber = ([int](Get-Content $versionFile -Raw)) + 1
 Set-Content -Path $versionFile -Value $buildNumber -NoNewline
-$version = "1.0.$buildNumber"
+$projectFile = Join-Path $root "src\SkyFireLauncher\SkyFireLauncher.csproj"
+[xml]$project = Get-Content $projectFile
+$productVersion = [version]$project.Project.PropertyGroup.Version
+$version = "$($productVersion.Major).$($productVersion.Minor).$buildNumber"
 Write-Host "Building version $version..."
 
 Write-Host "Publishing self-contained win-x64 build..."
-dotnet publish (Join-Path $root "src\SkyFireLauncher\SkyFireLauncher.csproj") `
+dotnet publish $projectFile `
     -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false `
     -p:Version=$version `
     -o (Join-Path $installerDir "publish\win-x64")
