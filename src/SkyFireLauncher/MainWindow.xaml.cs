@@ -15,6 +15,10 @@ namespace SkyFireLauncher;
 
 public partial class MainWindow : Window
 {
+    // The client's own authnet CVar is written with an explicit port rather
+    // than relying on any client-side default port.
+    private const ushort AuthnetGamePort = 1119;
+
     private readonly ConfigManager _configManager = new();
     private AppConfig _config = new();
 
@@ -30,7 +34,7 @@ public partial class MainWindow : Window
         var assembly = Assembly.GetExecutingAssembly();
         AboutVersionTextBlock.Text = assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-            ?? "1.4 Non Authnet";
+            ?? "1.4 Authnet";
         AboutCopyrightTextBlock.Text = assembly
             .GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright
             ?? "Copyright © 2026 Project SkyFire";
@@ -42,6 +46,7 @@ public partial class MainWindow : Window
         ClientLocationTextBox.Text = _config.ClientLocation;
         LoginAddressTextBox.Text = _config.LoginAddress;
         ClearCacheOnLoginCheckBox.IsChecked = _config.ClearCacheOnLogin;
+        EnableAuthnetLoginCheckBox.IsChecked = _config.EnableAuthnetLogin;
 
         SetVersionRadios(Version32RadioButton, Version64RadioButton, _config.DefaultVersion);
         SetVersionRadios(LaunchVersion32RadioButton, LaunchVersion64RadioButton, _config.DefaultVersion);
@@ -76,17 +81,21 @@ public partial class MainWindow : Window
     private void AboutCloseButton_Click(object sender, RoutedEventArgs e) => ShowAbout(false);
 
     private void ShowSettings(bool show) =>
-        ShowOverlay(SettingsPane, SettingsPaneTransform, AboutPane, show);
+        ShowOverlay(SettingsPane, SettingsPaneTransform, show, AboutPane, MigratePane);
 
     private void ShowAbout(bool show) =>
-        ShowOverlay(AboutPane, AboutPaneTransform, SettingsPane, show);
+        ShowOverlay(AboutPane, AboutPaneTransform, show, SettingsPane, MigratePane);
 
-    private void ShowOverlay(Grid pane, TranslateTransform transform, Grid otherPane, bool show)
+    private void ShowOverlay(Grid pane, TranslateTransform transform, bool show, params Grid[] otherPanes)
     {
         if (show)
         {
-            otherPane.BeginAnimation(OpacityProperty, null);
-            otherPane.Visibility = Visibility.Collapsed;
+            foreach (var otherPane in otherPanes)
+            {
+                otherPane.BeginAnimation(OpacityProperty, null);
+                otherPane.Visibility = Visibility.Collapsed;
+            }
+
             pane.Visibility = Visibility.Visible;
             var fade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)) { EasingFunction = new QuadraticEase() };
             var slide = new DoubleAnimation(18, 0, TimeSpan.FromMilliseconds(220)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
@@ -100,8 +109,15 @@ public partial class MainWindow : Window
             fade.Completed += (_, _) =>
             {
                 pane.Visibility = Visibility.Collapsed;
-                if (otherPane.Visibility != Visibility.Visible)
-                    LaunchPane.IsEnabled = true;
+                LaunchPane.IsEnabled = true;
+                foreach (var otherPane in otherPanes)
+                {
+                    if (otherPane.Visibility == Visibility.Visible)
+                    {
+                        LaunchPane.IsEnabled = false;
+                        break;
+                    }
+                }
             };
             pane.BeginAnimation(OpacityProperty, fade);
         }
@@ -114,6 +130,8 @@ public partial class MainWindow : Window
 
         if (AboutPane.Visibility == Visibility.Visible)
             ShowAbout(false);
+        else if (MigratePane.Visibility == Visibility.Visible)
+            ShowMigrate(false);
         else if (SettingsPane.Visibility == Visibility.Visible)
             ShowSettings(false);
         else
@@ -137,6 +155,74 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private void MigrateOpenButton_Click(object sender, RoutedEventArgs e)
+    {
+        ShowSettings(false);
+        ShowMigrate(true);
+    }
+
+    private void MigrateCloseButton_Click(object sender, RoutedEventArgs e) => ShowMigrate(false);
+
+    private void ShowMigrate(bool show)
+    {
+        if (show)
+            MigrateStatusTextBlock.Text = string.Empty;
+
+        ShowOverlay(MigratePane, MigratePaneTransform, show, SettingsPane, AboutPane);
+    }
+
+    private async void MigrateSubmitButton_Click(object sender, RoutedEventArgs e)
+    {
+        var username = MigrateUsernameTextBox.Text.Trim();
+        var oldPassword = MigrateOldPasswordBox.Password;
+        var email = MigrateEmailTextBox.Text.Trim();
+        var newPassword = MigrateNewPasswordBox.Password;
+        var confirmPassword = MigrateConfirmPasswordBox.Password;
+
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(oldPassword) ||
+            string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(newPassword))
+        {
+            MigrateStatusTextBlock.Text = "Fill in every field.";
+            return;
+        }
+
+        if (newPassword != confirmPassword)
+        {
+            MigrateStatusTextBlock.Text = "New password and confirmation do not match.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_config.LoginAddress))
+        {
+            MigrateStatusTextBlock.Text = "Login address is not set. Configure it above first.";
+            return;
+        }
+
+        MigrateSubmitButton.IsEnabled = false;
+        MigrateStatusTextBlock.Text = "Migrating…";
+
+        try
+        {
+            var result = await AccountMigrationClient.MigrateAsync(_config.LoginAddress, username, oldPassword, email, newPassword);
+            MigrateStatusTextBlock.Text = result.ToDisplayMessage();
+
+            if (result == AuthMigrateResult.Ok)
+            {
+                MigrateOldPasswordBox.Password = string.Empty;
+                MigrateNewPasswordBox.Password = string.Empty;
+                MigrateConfirmPasswordBox.Password = string.Empty;
+            }
+        }
+        catch (Exception ex)
+        {
+            MigrateStatusTextBlock.Text = $"Migration failed: {ex.Message}";
+        }
+        finally
+        {
+            MigrateSubmitButton.IsEnabled = true;
+        }
+    }
+
     private void BrowseButton_Click(object sender, RoutedEventArgs e)
     {
         using var dialog = new WinForms.FolderBrowserDialog
@@ -155,6 +241,7 @@ public partial class MainWindow : Window
         _config.DefaultVersion = Version64RadioButton.IsChecked == true ? ClientVersion.X64 : ClientVersion.X86;
         _config.LoginAddress = LoginAddressTextBox.Text;
         _config.ClearCacheOnLogin = ClearCacheOnLoginCheckBox.IsChecked == true;
+        _config.EnableAuthnetLogin = EnableAuthnetLoginCheckBox.IsChecked == true;
 
         try
         {
@@ -192,16 +279,35 @@ public partial class MainWindow : Window
 
         try
         {
+            LaunchButton.IsEnabled = false;
+
             if (_config.ClearCacheOnLogin)
                 ClearClientCache(_config.ClientLocation);
 
             RealmlistConfigWriter.SetRealmlist(_config.ClientLocation, _config.LoginAddress);
-            ClientProcessLauncher.LaunchAndRedirect(exePath, _config.ClientLocation, _config.LoginAddress);
+
+            if (_config.EnableAuthnetLogin)
+            {
+                var loginHost = _config.LoginAddress.Split(':')[0];
+                RealmlistConfigWriter.SetRealmlistBn(_config.ClientLocation, $"{loginHost}:{AuthnetGamePort}");
+            }
+            else
+            {
+                RealmlistConfigWriter.ClearRealmlistBn(_config.ClientLocation);
+            }
+
+            var useAuthnetClientRoute = _config.EnableAuthnetLogin;
+            ClientProcessLauncher.LaunchAndRedirect(exePath, _config.ClientLocation, _config.LoginAddress, useAuthnetClientRoute);
+
             LaunchStatusTextBlock.Text = $"Launched {exeName}, redirected to {_config.LoginAddress}.";
         }
         catch (Exception ex)
         {
             LaunchStatusTextBlock.Text = $"Failed to launch: {ex.Message}";
+        }
+        finally
+        {
+            LaunchButton.IsEnabled = true;
         }
     }
 

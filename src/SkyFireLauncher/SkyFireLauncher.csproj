@@ -12,7 +12,7 @@
     <ApplicationTitle>SkyFire Launcher</ApplicationTitle>
     <ApplicationIcon>AppIcon.ico</ApplicationIcon>
     <Version>1.4.0</Version>
-    <InformationalVersion>1.4 Non Authnet</InformationalVersion>
+    <InformationalVersion>1.4 Authnet</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Copyright>Copyright © 2026 Project SkyFire</Copyright>
     <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
@@ -28,6 +28,7 @@
     <Resource Include="Assets\skyfire-launcher-logo.png" />
     <Resource Include="Fonts\*.ttf" />
     <Resource Include="Fonts\*.otf" />
+    <EmbeddedResource Include="AuthModules\*.auth" />
   </ItemGroup>
 
 </Project>

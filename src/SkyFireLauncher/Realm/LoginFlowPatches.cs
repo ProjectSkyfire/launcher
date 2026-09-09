@@ -5,9 +5,9 @@ namespace SkyFireLauncher.Realm;
 // confirm what it actually does before including it here - in particular,
 // "Email" (the one that matters for connection mode) overwrites a single
 // conditional-jump opcode (0x74, JZ) with an unconditional jump (0xEB)
-// right at the branch that otherwise routes login through the modern
-// Battle.net/Agent protocol - forcing the classic realmList-based path
-// instead, which is what SkyFire's authserver actually speaks.
+// right at the branch that otherwise routes login through the authnet path -
+// forcing the classic realmList-based path instead, which is what the classic
+// authserver flow speaks.
 //
 // 0x00 bytes in a pattern are wildcards (match any byte). A match is
 // replaced starting at its own offset - shorter replacements just

@@ -15,14 +15,17 @@ and applies its changes directly to the running process in memory:
 
 - Redirects the client's login/realm connection to the server address configured
   in the launcher, by hooking the client's own DNS resolution.
-- Applies a small set of targeted in-memory patches to the client's login flow
-  so it authenticates against a classic realmlist-based authserver (like
-  SkyFire's) instead of routing through the modern Battle.net/Agent protocol.
+- Applies targeted in-memory endpoint and trust patches so the clean client can
+  use the server's authnet protocol implementation.
+- Prepares the authentication modules required by the client without modifying
+  the client executable.
+- Leaves account and password entry to the client; the launcher does not ask
+  players to enter their credentials a second time.
 - Leaves the client executable on disk untouched. Every change is undone the
   moment the process exits.
 
-Support for pre-patched clients, and eventually a Battle.net-protocol-compatible
-server, is planned.
+The authnet login path is experimental and is being developed alongside the
+server implementation.
 
 ## Status
 
