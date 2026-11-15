@@ -47,6 +47,7 @@ public partial class MainWindow : Window
         LoginAddressTextBox.Text = _config.LoginAddress;
         ClearCacheOnLoginCheckBox.IsChecked = _config.ClearCacheOnLogin;
         EnableAuthnetLoginCheckBox.IsChecked = _config.EnableAuthnetLogin;
+        AuthnetPublicKeyTextBox.Text = _config.AuthnetPasswordProofPublicKey;
 
         SetVersionRadios(Version32RadioButton, Version64RadioButton, _config.DefaultVersion);
         SetVersionRadios(LaunchVersion32RadioButton, LaunchVersion64RadioButton, _config.DefaultVersion);
@@ -242,9 +243,12 @@ public partial class MainWindow : Window
         _config.LoginAddress = LoginAddressTextBox.Text;
         _config.ClearCacheOnLogin = ClearCacheOnLoginCheckBox.IsChecked == true;
         _config.EnableAuthnetLogin = EnableAuthnetLoginCheckBox.IsChecked == true;
+        _config.AuthnetPasswordProofPublicKey = AuthnetPublicKeyTextBox.Text.Trim();
 
         try
         {
+            if (_config.EnableAuthnetLogin)
+                AuthnetClientSupport.ParsePasswordProofPublicKey(_config.AuthnetPasswordProofPublicKey);
             _configManager.Save(_config);
         }
         catch (Exception ex)
@@ -297,7 +301,7 @@ public partial class MainWindow : Window
             }
 
             var useAuthnetClientRoute = _config.EnableAuthnetLogin;
-            ClientProcessLauncher.LaunchAndRedirect(exePath, _config.ClientLocation, _config.LoginAddress, useAuthnetClientRoute);
+            ClientProcessLauncher.LaunchAndRedirect(exePath, _config.ClientLocation, _config.LoginAddress, useAuthnetClientRoute, _config.AuthnetPasswordProofPublicKey);
 
             LaunchStatusTextBlock.Text = $"Launched {exeName}, redirected to {_config.LoginAddress}.";
         }

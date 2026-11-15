@@ -35,13 +35,13 @@ public static class ClientProcessLauncher
         ("us.logon.worldofwarcraft.com:3724", "{0}:3724")
     ];
 
-    public static int LaunchAndRedirect(string exePath, string workingDirectory, string targetAddress, bool enableAuthnetLogin = false)
+    public static int LaunchAndRedirect(string exePath, string workingDirectory, string targetAddress, bool enableAuthnetLogin = false, string authnetPasswordProofPublicKey = "")
     {
         var fileBuffer = File.ReadAllBytes(exePath);
         var is64Bit = PeImportTable.IsPe64Bit(fileBuffer);
 
         if (enableAuthnetLogin)
-            AuthnetClientSupport.PrepareModuleCache(workingDirectory, is64Bit);
+            AuthnetClientSupport.PrepareModuleCache(workingDirectory, is64Bit, authnetPasswordProofPublicKey);
 
         var startupInfo = new STARTUPINFO();
         startupInfo.cb = Marshal.SizeOf<STARTUPINFO>();

@@ -187,7 +187,8 @@
                                         Click="SettingsCloseButton_Click"/>
                             </Grid>
 
-                            <StackPanel Grid.Row="1" Margin="0,8,0,16">
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,8,0,16">
+                            <StackPanel>
                                 <TextBlock Text="Client Location" Style="{StaticResource FieldLabel}"/>
                                 <Grid Margin="0,0,0,16">
                                     <Grid.ColumnDefinitions>
@@ -231,12 +232,20 @@
                                           Style="{StaticResource LauncherCheckBox}"
                                           Margin="0,0,0,16"/>
 
+                                <TextBlock Text="Authnet server public key (hex)" Style="{StaticResource FieldLabel}"/>
+                                <TextBox x:Name="AuthnetPublicKeyTextBox"
+                                         Style="{StaticResource LauncherTextBox}"
+                                         TextWrapping="Wrap" AcceptsReturn="True" Height="72"
+                                         VerticalScrollBarVisibility="Auto" Margin="0,0,0,16"
+                                         ToolTip="Paste the 128-byte little-endian public key supplied by your server administrator. Never enter a private key."/>
+
                                 <Button x:Name="MigrateOpenButton"
                                         Content="Migrate Account to Email Login…"
                                         Style="{StaticResource SecondaryButton}"
                                         HorizontalAlignment="Left"
                                         Click="MigrateOpenButton_Click"/>
                             </StackPanel>
+                            </ScrollViewer>
 
                             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button Content="Back"

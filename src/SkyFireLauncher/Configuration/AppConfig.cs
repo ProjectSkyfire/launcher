@@ -9,4 +9,5 @@ public class AppConfig
 
     // Experimental: routes the client's authnet endpoint to port 1119.
     public bool EnableAuthnetLogin { get; set; }
+    public string AuthnetPasswordProofPublicKey { get; set; } = string.Empty;
 }

@@ -51,7 +51,19 @@ Start Menu shortcut and a standard uninstaller entry.
 3. On the **Configuration** tab, set your WoW 5.4.8 client folder, default
    client architecture (32 or 64-bit), and the login address of the SkyFire
    server you want to connect to.
-4. On the **Launch** tab, pick a version and click **Launch**.
+4. For Authnet, enable Authnet login and paste your server administrator's
+   **password-proof public key** into Configuration. Use 256 hex characters
+   encoding the 128-byte little-endian key; whitespace is allowed. This is not
+   the server's private key or its RSA module-signing key. A missing or invalid
+   key prevents Authnet launch. Standard login does not require it.
+5. On the **Launch** tab, pick a version and click **Launch**.
+
+The launcher installs a password module trusting the configured key and retains
+its server-proof verification. It backs up recognized older password modules
+from the shared Battle.net cache to `%APPDATA%/SkyFireLauncher/AuthModuleBackups`
+so they cannot override the selected key. Close existing game clients before
+switching server keys. The pristine module in your client directory is preserved.
+Key changes take effect on the next client launch.
 
 ### Building the installer
 
@@ -69,3 +81,11 @@ Produces `installer\bin\x64\Release\SkyFireLauncherSetup.msi`.
 ## License
 
 See [LICENSE](LICENSE).
+
+### Public-key checks
+
+Run `dotnet run --project tests/AuthnetPublicKey -c Release` for key validation
+checks. To also verify a real build 18414 module without launching the game, append
+`-- <pristine-module.auth> <public-key.hex>` (and `--x86` for a 32-bit module).
+The integration check verifies the original checksum and confirms that only the
+128-byte public key changes; the verification code remains intact.

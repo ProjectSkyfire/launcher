@@ -17,3 +17,5 @@ Unpatched/WTF/
 Unpatched/Cache/
 Unpatched/Errors/
 Unpatched/Logs/
+
+tests/**/bin/

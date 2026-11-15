@@ -1,5 +1,6 @@
 using System.IO;
 using System.Reflection;
+using System.Numerics;
 using System.Security.Cryptography;
 
 namespace SkyFireLauncher.Realm;
@@ -52,26 +53,83 @@ internal static class AuthnetClientSupport
             [0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0xEB], true)
     ];
 
-    internal static string PrepareModuleCache(string clientDirectory, bool is64Bit)
+    // Build 18414 password-proof public key (128 little-endian bytes), shared by x86/x64.
+    private static readonly byte[] OriginalPasswordProofPublicKey = Convert.FromHexString("71683a6cff38f8558038ff6a2d4c30f952e9cbb02f7dde3a23ffcdc18bd9c44e58a6d568dc30f9b156eb921b94d3106f2c9f55170293c556b6c0fc302bfa8da04bcdf0d78d96b8e96bf8ad8952fcf3a6488efe5816a2aaa3d9cecbff39c56a261a009a3d8d06546eae8af26757a45fcf153ab9ce3decca3b547d9eab7b256842");
+    private static readonly BigInteger PasswordProofModulus = new(Convert.FromHexString("a348f5dcfb382d0b88a3c932e93158156e9817733bf0a4028e0ec4320b9be13adb6b4f044c0ef111d3ff2792edc408fb7b424d49e572ecb56d9d2a9655854445ed756813ac7c18b7b6ccb8537947739b19955f8f18ba4fcac5dddfa1f1cd0f5d6ba2baeb6d5133a69ac2be3450daa1702bb2da7ea5ffa367431080248663348d"), isUnsigned: true, isBigEndian: false);
+
+    internal static byte[] ParsePasswordProofPublicKey(string publicKeyHex)
+    {
+        var normalized = string.Concat((publicKeyHex ?? string.Empty).Where(c => !char.IsWhiteSpace(c)));
+        if (normalized.Length != 256 || normalized.Any(c => !Uri.IsHexDigit(c)))
+            throw new InvalidDataException("Authnet requires the server's 128-byte public key (256 hexadecimal characters). Set it in Configuration.");
+        var key = Convert.FromHexString(normalized);
+        var value = new BigInteger(key, isUnsigned: true, isBigEndian: false);
+        if (value <= BigInteger.One || value >= PasswordProofModulus - BigInteger.One ||
+            BigInteger.ModPow(value, (PasswordProofModulus - BigInteger.One) / 2, PasswordProofModulus) != BigInteger.One)
+            throw new InvalidDataException("The Authnet public key is not a valid password-proof group element.");
+        return key;
+    }
+
+    internal static byte[] PatchPasswordProofPublicKey(byte[] original, bool is64Bit, string publicKeyHex)
+    {
+        var key = ParsePasswordProofPublicKey(publicKeyHex);
+        var expectedHash = is64Bit ? X64BaseModuleHash : X86BaseModuleHash;
+        if (Convert.ToHexStringLower(SHA256.HashData(original)) != expectedHash)
+            throw new InvalidDataException("The base authentication module has an unexpected checksum.");
+        var patched = (byte[])original.Clone();
+        key.CopyTo(patched, FindUnique(patched, OriginalPasswordProofPublicKey));
+        // Keep the original success/failure branch: the client must verify the server proof.
+        return patched;
+    }
+
+    internal static string PrepareModuleCache(string clientDirectory, bool is64Bit, string publicKeyHex)
     {
         var baseHash = is64Bit ? X64BaseModuleHash : X86BaseModuleHash;
         var modulePath = FindBaseModule(clientDirectory, baseHash);
         var module = File.ReadAllBytes(modulePath);
-        var actualHash = Convert.ToHexStringLower(SHA256.HashData(module));
-
-        if (!string.Equals(actualHash, baseHash, StringComparison.Ordinal))
-            throw new InvalidDataException($"The base authentication module '{modulePath}' has an unexpected checksum.");
-
-        var passwordPattern = is64Bit
-            ? new byte[] { 0x74, 0x84, 0x48, 0x8B, 0x03 }
-            : [0x74, 0x89, 0x8B, 0x16, 0x8B, 0x42, 0x04];
-        var matchOffset = FindUnique(module, passwordPattern);
-        module[matchOffset] = 0x75;
+        var original = module;
+        module = PatchPasswordProofPublicKey(original, is64Bit, publicKeyHex);
 
         var patchedHash = Convert.ToHexStringLower(SHA256.HashData(module));
         InstallCachedModule(patchedHash, module);
+        RetirePreviousPasswordModules(original, is64Bit, patchedHash);
         InstallEmbeddedModule(is64Bit ? X64RiskModuleHash : X86RiskModuleHash);
         return patchedHash;
+    }
+
+    private static void RetirePreviousPasswordModules(byte[] original, bool is64Bit, string activeHash)
+    {
+        // The client discovers cached modules by type. Keep one verifier per architecture,
+        // otherwise a module trusting a previous server key may be selected at login.
+        var cache = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "Blizzard Entertainment", "Battle.net", "Cache");
+        var backup = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "SkyFireLauncher", "AuthModuleBackups");
+        var keyOffset = FindUnique(original, OriginalPasswordProofPublicKey);
+        var branchOffset = FindUnique(original, is64Bit
+            ? new byte[] { 0x74, 0x84, 0x48, 0x8B, 0x03 }
+            : [0x74, 0x89, 0x8B, 0x16, 0x8B, 0x42, 0x04]);
+        foreach (var path in Directory.EnumerateFiles(cache, "*.auth", SearchOption.AllDirectories))
+        {
+            if (Path.GetFileNameWithoutExtension(path).Equals(activeHash, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (new FileInfo(path).Length != original.Length)
+                continue;
+            var candidate = File.ReadAllBytes(path);
+            if (candidate[branchOffset] != 0x74 && candidate[branchOffset] != 0x75)
+                continue;
+            var normalized = (byte[])candidate.Clone();
+            OriginalPasswordProofPublicKey.CopyTo(normalized, keyOffset);
+            normalized[branchOffset] = original[branchOffset];
+            if (!normalized.SequenceEqual(original))
+                continue; // Never move unrelated authentication modules.
+            Directory.CreateDirectory(backup);
+            var destination = Path.Combine(backup, Convert.ToHexStringLower(SHA256.HashData(candidate)) + ".auth");
+            if (!File.Exists(destination))
+                File.Copy(path, destination);
+            File.SetAttributes(path, FileAttributes.Normal);
+            File.Delete(path);
+        }
     }
 
     private static void InstallEmbeddedModule(string expectedHash)
@@ -122,10 +180,13 @@ internal static class AuthnetClientSupport
         {
             Path.Combine(clientDirectory, moduleName),
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-                "Blizzard Entertainment", "Battle.net", "Cache", baseHash[..2], baseHash.Substring(2, 2), moduleName)
+                "Blizzard Entertainment", "Battle.net", "Cache", baseHash[..2], baseHash.Substring(2, 2), moduleName),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "SkyFireLauncher", "AuthModuleBackups", moduleName)
         };
 
-        return candidates.FirstOrDefault(File.Exists)
+        return candidates.FirstOrDefault(path => File.Exists(path) &&
+            Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path))) == baseHash)
             ?? throw new FileNotFoundException($"Required authentication module '{moduleName}' was not found.");
     }
 
