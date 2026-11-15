@@ -41,3 +41,20 @@ if (args.Length >= 2)
     if (args.Contains("--prepare-cache"))
         Console.WriteLine("Prepared authentication module: " + AuthnetClientSupport.PrepareModuleCache(Path.GetDirectoryName(Path.GetFullPath(args[0]))!, is64Bit, keyHex));
 }
+
+Check(LoginAddressResolver.ResolveIpv4(" 127.0.0.1 ", _ => throw new Exception("Literal must not use DNS")) == "127.0.0.1", "IPv4 literal failed.");
+Check(LoginAddressResolver.ResolveIpv4("example.test", _ => [System.Net.IPAddress.IPv6Loopback, System.Net.IPAddress.Parse("192.0.2.10")]) == "192.0.2.10", "IPv4 selection failed.");
+static void ExpectFailure(Action action, string expected)
+{
+    try { action(); }
+    catch (Exception ex) when (ex.Message.Contains(expected)) { return; }
+    throw new Exception("Expected address failure: " + expected);
+}
+ExpectFailure(() => LoginAddressResolver.ResolveIpv4("::1"), "requires an IPv4");
+ExpectFailure(() => LoginAddressResolver.ResolveIpv4("https://example.test"), "without a URL or port");
+ExpectFailure(() => LoginAddressResolver.ResolveIpv4("example.test:1119"), "without a URL or port");
+ExpectFailure(() => LoginAddressResolver.ResolveIpv4(""), "without a URL or port");
+ExpectFailure(() => LoginAddressResolver.ResolveIpv4("example.test", _ => [System.Net.IPAddress.IPv6Loopback]), "has no IPv4");
+ExpectFailure(() => LoginAddressResolver.ResolveIpv4("example.test", _ => throw new System.Net.Sockets.SocketException()), "Could not resolve");
+ExpectFailure(() => LoginAddressResolver.ResolveIpv4("example.test", _ => throw new TimeoutException()), "Could not resolve");
+Console.WriteLine("Hostname resolution and failure checks passed.");

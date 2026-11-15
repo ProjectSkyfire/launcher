@@ -10,6 +10,7 @@
 
 ### Changed
 
+- Login hostnames are resolved to IPv4 before starting the client, fixing "An invalid IP address was specified" for domain names. DNS failures and IPv6-only targets now produce clear errors.
 - Authentication modules now trust the configured server public key while retaining the original server-proof verification branch, replacing the previous branch inversion patch.
 - Recognized older password modules are backed up outside the shared Battle.net cache before removal from that cache to avoid using a previous server key.
 - Pristine authentication modules can also be recovered from the launcher's module backup directory.

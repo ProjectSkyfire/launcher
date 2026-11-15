@@ -37,6 +37,9 @@ public static class ClientProcessLauncher
 
     public static int LaunchAndRedirect(string exePath, string workingDirectory, string targetAddress, bool enableAuthnetLogin = false, string authnetPasswordProofPublicKey = "")
     {
+        // Resolve once before creating a process. Both native socket hooks require
+        // IPv4 bytes; use the same short address for the fixed-size hostname patches.
+        targetAddress = LoginAddressResolver.ResolveIpv4(targetAddress);
         var fileBuffer = File.ReadAllBytes(exePath);
         var is64Bit = PeImportTable.IsPe64Bit(fileBuffer);
 
