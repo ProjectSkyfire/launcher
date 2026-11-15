@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — Authnet public-key support
+## 1.4.2 — Authnet public-key support
 
 ### Added
 

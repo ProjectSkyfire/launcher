@@ -11,8 +11,8 @@
     <RootNamespace>SkyFireLauncher</RootNamespace>
     <ApplicationTitle>SkyFire Launcher</ApplicationTitle>
     <ApplicationIcon>AppIcon.ico</ApplicationIcon>
-    <Version>1.4.0</Version>
-    <InformationalVersion>1.4 Authnet</InformationalVersion>
+    <Version>1.4.2</Version>
+    <InformationalVersion>1.4.2 Authnet</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Copyright>Copyright © 2026 Project SkyFire</Copyright>
     <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
