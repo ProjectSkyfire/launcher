@@ -65,6 +65,17 @@ so they cannot override the selected key. Close existing game clients before
 switching server keys. The pristine module in your client directory is preserved.
 Key changes take effect on the next client launch.
 
+#### Matching authserver configuration
+
+For the verified 64-bit build 18414 login path, set the authserver's
+`Authnet.StartupModuleKey` to `6175746800004555` followed by the 64-character
+SHA-256 hash of the patched password module installed by the launcher. The
+result is an 80-character hex value. Use the hash for your server's public key;
+changing that key changes the module hash. Leaving this setting empty makes
+the current authserver generate a random module identifier, which the client
+cannot load. This identifier is public metadata, not the password-proof private
+key. The 32-bit path has not yet been validated with this configuration.
+
 ### Building the installer
 
 Requires the [WiX Toolset](https://wixtoolset.org/) CLI:

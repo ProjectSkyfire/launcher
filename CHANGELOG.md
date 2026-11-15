@@ -20,6 +20,7 @@
 ### Upgrade notes
 
 - Authnet users must enter their server administrator's password-proof public key before launching. Standard login does not require a key.
+- The authserver's `Authnet.StartupModuleKey` must identify the matching patched password module; see the server configuration note in the README.
 - Close existing game clients before changing server keys. Changes take effect on the next client launch.
 - Private keys and user-specific server configuration are not included in the repository.
 
@@ -27,4 +28,5 @@
 
 - Windows Release build and self-contained publish passed.
 - Key-validation checks and a real 64-bit build 18414 module check passed; only the public-key bytes changed.
-- End-to-end production login and the real 32-bit module remain unverified.
+- End-to-end production login with the configured public key and hostname was confirmed by the user.
+- The real 32-bit module remains unverified.
